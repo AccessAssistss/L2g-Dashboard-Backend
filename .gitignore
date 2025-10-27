@@ -1,0 +1,46 @@
+# Node modules
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.*.local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Prisma artifacts
+/prisma/dev.db
+/prisma/*.sqlite
+/prisma/migrations/
+prisma/.env
+
+# Compiled output
+dist/
+build/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# VS Code settings
+.vscode/
+
+# Coverage reports
+coverage/
+*.lcov
+
+# Optional: ignore uploads (if storing locally)
+uploads/
+/var/www/loan2Grow/prisma/schema.prisma
+
+# Backup files (your DB dumps)
+/root/Earnplus-Backend/dbBackup
+/src/generated/prisma

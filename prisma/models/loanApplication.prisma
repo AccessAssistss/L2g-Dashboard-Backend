@@ -1,0 +1,175 @@
+model LoanApplication {
+    id             String     @id @default(uuid())
+    refId          String     @unique
+    applicantName  String
+    applicantPhone String
+    applicantEmail String
+    course         String
+    guardianName   String
+    guardianPhone  String
+    guardianEmail  String
+    relationship   String
+    fees           Float
+    loanAmount     Float?
+    interestRate   Float?
+    tenure         Int?
+    emiAmount      Float?
+    status         LoanStatus @default(PENDING)
+    createdAt      DateTime   @default(now())
+    updatedAt      DateTime   @updatedAt
+
+    kyc                KYC?
+    eNachMandate       ENachMandate?
+    disbursement       Disbursement?
+    loanAccount        LoanAccount?
+    closureCertificate ClosureCertificate?
+}
+
+model KYC {
+    id                  String    @id @default(uuid())
+    loanApplicationId   String    @unique
+    studentAadharFront  String?
+    studentAadharBack   String?
+    studentPanCard      String?
+    guardianAadharFront String?
+    guardianAadharBack  String?
+    guardianPanCard     String?
+    videoKycLink        String?
+    isVKYCApproved      Boolean   @default(false)
+    submittedAt         DateTime  @default(now())
+    approvedAt          DateTime?
+
+    loanApplication LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+}
+
+model ENachMandate {
+    id                String        @id @default(uuid())
+    loanApplicationId String        @unique
+    mandateId         String        @unique
+    tokenId           String?       @unique
+    customerId        String
+    bankAccountNo     String
+    ifscCode          String
+    accountType       String
+    maxAmount         Float
+    startDate         DateTime
+    endDate           DateTime?
+    status            MandateStatus @default(CREATED)
+    authType          String        @default("netbanking")
+    authLink          String?
+    createdAt         DateTime      @default(now())
+    updatedAt         DateTime      @updatedAt
+
+    loanApplication LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+    emiSchedules    EMISchedule[]
+    autoPayments    AutoPayment[]
+}
+
+model EMISchedule {
+    id            String    @id @default(uuid())
+    mandateId     String
+    emiNumber     Int
+    emiAmount     Float
+    scheduledDate DateTime
+    status        EMIStatus @default(PENDING)
+    paidDate      DateTime?
+    paymentId     String?
+    failureReason String?
+    retryCount    Int       @default(0)
+    createdAt     DateTime  @default(now())
+    updatedAt     DateTime  @updatedAt
+
+    mandate ENachMandate @relation(fields: [mandateId], references: [id], onDelete: Cascade)
+}
+
+model AutoPayment {
+    id                String        @id @default(uuid())
+    mandateId         String
+    loanApplicationId String
+    loanAccountId     String?
+    razorpayPaymentId String        @unique
+    razorpayOrderId   String?
+    amount            Float
+    status            PaymentStatus @default(CREATED)
+    paymentDate       DateTime?
+    principalAmount   Float?
+    interestAmount    Float?
+    method            String?
+    failureReason     String?
+    createdAt         DateTime      @default(now())
+    updatedAt         DateTime      @updatedAt
+
+    mandate ENachMandate @relation(fields: [mandateId], references: [id], onDelete: Cascade)
+}
+
+model Disbursement {
+    id                String          @id @default(uuid())
+    loanApplicationId String          @unique
+    disbursedAmount   Float
+    interestRate      Float
+    tenure            Int
+    advanceEMIPaid    Boolean         @default(false)
+    advanceEMIAmount  Float?
+    interestPaidBy    InterestPaidBy?
+    disbursedAt       DateTime        @default(now())
+
+    loanApplication LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+}
+
+model LoanAccount {
+    id                String      @id @default(uuid())
+    loanAccountNo     String      @unique
+    loanApplicationId String      @unique
+    principalAmount   Float
+    interestAmount    Float
+    totalOutstanding  Float
+    totalPaid         Float       @default(0)
+    repayments        Repayment[]
+    utrDetails        UTRDetail[]
+    createdAt         DateTime    @default(now())
+    updatedAt         DateTime    @updatedAt
+
+    loanApplication LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+}
+
+model Repayment {
+    id               String      @id @default(uuid())
+    loanAccountId    String
+    amountPaid       Float
+    paymentDate      DateTime
+    paymentMode      PaymentMode
+    utrId            String?
+    screenshot       String?
+    principalAmount  Float
+    interestAmount   Float
+    totalOutstanding Float
+    createdAt        DateTime    @default(now())
+    updatedAt        DateTime    @updatedAt
+
+    loanAccount LoanAccount @relation(fields: [loanAccountId], references: [id], onDelete: Cascade)
+}
+
+model UTRDetail {
+    id            String      @id @default(uuid())
+    loanAccountId String
+    utrId         String      @unique
+    amountPaid    Float
+    paymentDate   DateTime
+    paymentMode   PaymentMode
+    screenshot    String?
+    createdAt     DateTime    @default(now())
+    updatedAt     DateTime    @updatedAt
+
+    loanAccount LoanAccount @relation(fields: [loanAccountId], references: [id], onDelete: Cascade)
+}
+
+model ClosureCertificate {
+    id                String   @id @default(uuid())
+    loanApplicationId String   @unique
+    certificateUrl    String?
+    closedDate        DateTime @default(now())
+    createdAt         DateTime @default(now())
+    updatedAt         DateTime @updatedAt
+
+    loanApplication LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+}

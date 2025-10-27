@@ -1,0 +1,48 @@
+enum LoanStatus {
+    PENDING
+    APPROVED
+    ENACH_PENDING
+    ENACH_ACTIVE
+    DISBURSED
+    CLOSED
+}
+
+enum PaymentMode {
+    ONLINE
+    CASH
+    CHEQUE
+    BANK_TRANSFER
+    UPI
+}
+
+enum InterestPaidBy {
+    STUDENT
+    COLLEGE
+}
+
+enum MandateStatus {
+  CREATED
+  AUTHENTICATED
+  CONFIRMED
+  ACTIVE
+  PAUSED
+  CANCELLED
+  COMPLETED
+}
+
+enum EMIStatus {
+  PENDING
+  SCHEDULED
+  PROCESSING
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
+enum PaymentStatus {
+  CREATED
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  REFUNDED
+}
