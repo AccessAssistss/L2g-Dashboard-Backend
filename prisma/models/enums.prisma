@@ -1,25 +1,34 @@
+// ##########----------Custom User Enums----------##########
+enum UserType {
+  AGENT
+}
+
+// ##########----------Loan Status Enums----------##########
 enum LoanStatus {
-    PENDING
-    APPROVED
-    ENACH_PENDING
-    ENACH_ACTIVE
-    DISBURSED
-    CLOSED
+  PENDING
+  APPROVED
+  ENACH_PENDING
+  ENACH_ACTIVE
+  DISBURSED
+  CLOSED
 }
 
+// ##########----------Payment Mode Enums----------##########
 enum PaymentMode {
-    ONLINE
-    CASH
-    CHEQUE
-    BANK_TRANSFER
-    UPI
+  ONLINE
+  CASH
+  CHEQUE
+  BANK_TRANSFER
+  UPI
 }
 
+// ##########----------Interest Paid By Enums----------##########
 enum InterestPaidBy {
-    STUDENT
-    COLLEGE
+  STUDENT
+  COLLEGE
 }
 
+// ##########----------Mandate Status Enums----------##########
 enum MandateStatus {
   CREATED
   AUTHENTICATED
@@ -30,6 +39,7 @@ enum MandateStatus {
   COMPLETED
 }
 
+// ##########----------EMI Status Enums----------##########
 enum EMIStatus {
   PENDING
   SCHEDULED
@@ -39,6 +49,7 @@ enum EMIStatus {
   SKIPPED
 }
 
+// ##########----------Payment Status Enums----------##########
 enum PaymentStatus {
   CREATED
   AUTHORIZED

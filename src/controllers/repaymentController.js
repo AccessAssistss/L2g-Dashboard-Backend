@@ -1,45 +1,16 @@
 const { PrismaClient } = require("@prisma/client");
 const { asyncHandler } = require("../../utils/asyncHandler");
+const { sendEmiReminderMessage } = require("../../utils/messageSender");
+const xlsx = require("xlsx");
+const fs = require("fs");
+const path = require("path");
+const moment = require("moment");
 
 const prisma = new PrismaClient();
 
-const addUTRDetails = asyncHandler(async (req, res) => {
-    const { loanApplicationId } = req.params;
-    const { utrId, amountPaid, paymentDate, paymentMode } = req.body;
-
-    const loanAccount = await prisma.loanAccount.findUnique({
-        where: { loanApplicationId: loanApplicationId },
-    });
-
-    if (!loanAccount) {
-        return res.respond(404, "Loan account not found");
-    }
-
-    const parsedPaymentDate = new Date(paymentDate);
-    if (isNaN(parsedPaymentDate.getTime())) {
-        return res.respond(400, "Invalid payment date");
-    }
-
-    const paymentRecieptFile = req.files?.paymentReciept?.[0];
-    const paymentRecieptUrl = paymentRecieptFile
-        ? `/uploads/loan/payment/reciept/${paymentRecieptFile.filename}`
-        : null;
-
-    const utrDetail = await prisma.uTRDetail.create({
-        data: {
-            loanAccountId: loanAccount.id,
-            utrId,
-            amountPaid,
-            paymentDate: parsedPaymentDate,
-            paymentMode,
-            screenshot: paymentRecieptUrl,
-        },
-    });
-
-    res.respond(200, "UTR details added successfully", utrDetail);
-});
-
+// ##########----------Process Repayment----------##########
 const processRepayment = asyncHandler(async (req, res) => {
+    const userId = req.user;
     const { loanApplicationId } = req.params;
     const {
         utrId,
@@ -47,6 +18,13 @@ const processRepayment = asyncHandler(async (req, res) => {
         paymentDate,
         paymentMode,
     } = req.body;
+
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
 
     const loanAccount = await prisma.loanAccount.findUnique({
         where: { loanApplicationId: loanApplicationId },
@@ -92,7 +70,7 @@ const processRepayment = asyncHandler(async (req, res) => {
 
     const result = await prisma.$transaction(async (tx) => {
         const repayment = await tx.repayment.create({
-            data: { 
+            data: {
                 loanAccountId: loanAccount.id,
                 amountPaid: amountPaidFloat,
                 paymentDate: parsedPaymentDate,
@@ -134,8 +112,17 @@ const processRepayment = asyncHandler(async (req, res) => {
     res.respond(200, "Repayment processed successfully", result);
 });
 
+// ##########----------Get Repayment History----------##########
 const getRepaymentHistory = asyncHandler(async (req, res) => {
     const { loanApplicationId } = req.params;
+    const userId = req.user;
+
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
 
     const loanAccount = await prisma.loanAccount.findUnique({
         where: { loanApplicationId: loanApplicationId },
@@ -164,7 +151,17 @@ const getRepaymentHistory = asyncHandler(async (req, res) => {
     });
 });
 
+// ##########----------Get Closed Loans----------##########
 const getClosedLoans = asyncHandler(async (req, res) => {
+    const userId = req.user;
+
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
+
     const closedLoans = await prisma.loanApplication.findMany({
         where: {
             status: "CLOSED",
@@ -194,8 +191,17 @@ const getClosedLoans = asyncHandler(async (req, res) => {
     res.respond(200, "Closed loans fetched successfully", closedLoans);
 });
 
+// ##########----------Get Closure Certificate----------##########
 const getClosureCertificate = asyncHandler(async (req, res) => {
     const { loanApplicationId } = req.params;
+    const userId = req.user;
+
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
 
     const certificate = await prisma.closureCertificate.findUnique({
         where: { loanApplicationId },
@@ -208,10 +214,100 @@ const getClosureCertificate = asyncHandler(async (req, res) => {
     res.respond(200, "Closure certificate fetched successfully", certificate);
 });
 
+const sendBulkEmiReminderMessagesFromExcel = asyncHandler(async (req, res) => {
+    if (!req.file) {
+        return res.respond(400, "No file uploaded!");
+    }
+
+    const filePath = req.file.path;
+
+    let workbook;
+    try {
+        workbook = xlsx.readFile(filePath);
+    } catch (err) {
+        return res.respond(400, "Failed to parse Excel file.");
+    }
+
+    const sheetName = workbook.SheetNames[0];
+    const sheetData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+    const results = [];
+
+    for (const row of sheetData) {
+        const name = row['Applicant Name'] || row.name || row.Name || "Customer";
+        const mobile = String(row['Mobile Number'] || row.mobile || row.phone || row.Phone || '').trim();
+        const guardianMobile = String(row['Guardian Mobile'] || row['Guardian Number'] || row.guardian_mobile || row.gmobile || '').trim();
+        const emiAmount = row['Emi Amount'] || row.emi || row.EMI_Amount || row.amount;
+        const loanAccountNo = row['Loan No'] || row.loan || row.Loan_Account_No || row.account;
+        // const dueDateRaw = row['Due Date'] || row.Date || row.date || row.dueDate || null;
+
+        const emiDateRaw = row['Due Date'] || row.Date || row.date || row.dueDate || "N/A";
+
+        let dueDate = "N/A";
+
+        if (emiDateRaw) {
+            let parsedDate;
+
+            if (typeof emiDateRaw === "number") {
+                parsedDate = moment(new Date((emiDateRaw - 25569) * 86400 * 1000));
+            } else if (emiDateRaw instanceof Date) {
+                parsedDate = moment(emiDateRaw);
+            } else {
+                parsedDate = moment(emiDateRaw, ["DD-MM-YYYY", "DD/MM/YYYY", "YYYY-MM-DD", "Do MMM YYYY"], true);
+            }
+
+            if (parsedDate.isValid()) {
+                dueDate = parsedDate.format("DD-MM-YYYY");
+            }
+        }
+
+        const cleanEmiAmount = typeof emiAmount === 'string' ? emiAmount.replace(/,/g, '') : emiAmount;
+
+        if (!mobile && !guardianMobile && !email) {
+            results.push({ status: "skipped", reason: "Missing mobile, guardian mobile and email", row });
+            continue;
+        }
+
+        const status = { sms_sent: null, guardian_sms_sent: null };
+
+        if (mobile) {
+            try {
+                const smsSent = await sendEmiReminderMessage(mobile, name, cleanEmiAmount, loanAccountNo, dueDate);
+                status.sms_sent = smsSent ? "sent" : "failed";
+            } catch (err) {
+                status.sms_sent = `failed: ${err.message}`;
+            }
+        }
+
+        if (guardianMobile && guardianMobile !== mobile) {
+            try {
+                const guardianSmsSent = await sendEmiReminderMessage(guardianMobile, name, cleanEmiAmount, loanAccountNo, dueDate);
+                status.guardian_sms_sent = guardianSmsSent ? "sent" : "failed";
+            } catch (err) {
+                status.guardian_sms_sent = `failed: ${err.message}`;
+            }
+        }
+
+        results.push({
+            name,
+            mobile,
+            guardianMobile,
+            emiAmount: cleanEmiAmount,
+            loanAccountNo,
+            dueDate,
+            ...status
+        });
+    }
+
+    fs.unlink(filePath, () => { });
+
+    res.respond(200, "Bulk EMI reminder messages sent.", results);
+});
+
 module.exports = {
-    addUTRDetails,
     processRepayment,
     getRepaymentHistory,
     getClosedLoans,
     getClosureCertificate,
+    sendBulkEmiReminderMessagesFromExcel
 };

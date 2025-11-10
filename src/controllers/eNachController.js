@@ -5,9 +5,19 @@ const { sendENachActivationEmail } = require("../../utils/mailSender");
 
 const prisma = new PrismaClient();
 
+// ##########----------Activate E-Nach----------##########
 const activateENach = asyncHandler(async (req, res) => {
+    const userId = req.user;
+
     const { loanApplicationId } = req.params;
     const { bankAccountNo, ifscCode, accountType = "savings" } = req.body;
+
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
 
     if (!bankAccountNo || !ifscCode) {
         return res.respond(400, "Bank account number and IFSC code are required");
@@ -149,8 +159,17 @@ const activateENach = asyncHandler(async (req, res) => {
     }
 });
 
+// ##########----------Check E-Nach Status----------##########
 const checkENachStatus = asyncHandler(async (req, res) => {
+    const userId = req.user;
     const { loanApplicationId } = req.params;
+    
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
 
     const mandate = await prisma.eNachMandate.findUnique({
         where: { loanApplicationId },
@@ -208,8 +227,17 @@ const checkENachStatus = asyncHandler(async (req, res) => {
     }
 });
 
+// ##########----------Resend E-Nach Link----------##########
 const resendENachLink = asyncHandler(async (req, res) => {
+    const userId = req.user;
     const { loanApplicationId } = req.params;
+    
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
 
     const mandate = await prisma.eNachMandate.findUnique({
         where: { loanApplicationId },
@@ -238,7 +266,17 @@ const resendENachLink = asyncHandler(async (req, res) => {
     res.respond(200, "e-NACH activation link resent successfully");
 });
 
+// ##########----------Get Loans For E-nach Activation----------##########
 const getLoansForENachActivation = asyncHandler(async (req, res) => {
+    const userId = req.user;
+    
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
+
     const loans = await prisma.loanApplication.findMany({
         where: {
             status: "APPROVED",
@@ -264,7 +302,17 @@ const getLoansForENachActivation = asyncHandler(async (req, res) => {
     res.respond(200, "Loans ready for e-NACH activation", loans);
 });
 
+// ##########----------Get E-nach Pending Loans----------##########
 const getPendingENachLoans = asyncHandler(async (req, res) => {
+    const userId = req.user;
+    
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
+
     const loans = await prisma.loanApplication.findMany({
         where: {
             status: "ENACH_PENDING"
@@ -288,7 +336,17 @@ const getPendingENachLoans = asyncHandler(async (req, res) => {
     res.respond(200, "Loans with pending e-NACH activation", loans);
 });
 
+// ##########----------Get E-nach Active Loans----------##########
 const getENachActiveLoans = asyncHandler(async (req, res) => {
+    const userId = req.user;
+    
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
+    
     const loans = await prisma.loanApplication.findMany({
         where: {
             status: "ENACH_ACTIVE"

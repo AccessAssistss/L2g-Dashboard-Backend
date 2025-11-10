@@ -9,7 +9,43 @@ datasource db {
 }
 
 
+// agent.prisma
+model Agent {
+    id            String     @id @default(uuid())
+    customUserId  String     @unique
+    designation   String?
+    department    String?
+    joiningDate   DateTime   @default(now())
+    isActive      Boolean    @default(true)
+    createdAt     DateTime   @default(now())
+    updatedAt     DateTime   @updatedAt
+
+    customUser    CustomUser @relation(fields: [customUserId], references: [id], onDelete: Cascade)
+}
+
+// customUser.prisma
+// ####################--------------------Custom User Model--------------------####################
+model CustomUser {
+    id                String   @id @default(uuid())
+    email             String?  @unique
+    name              String?
+    mobile            String   @db.VarChar(10)
+    userType          UserType
+    password          String
+    accessToken       String?
+    refreshToken      String?
+    createdAt         DateTime @default(now())
+    updatedAt         DateTime @updatedAt
+
+    agent             Agent?
+}
+
 // enums.prisma
+// ##########----------Custom User Enums----------##########
+enum UserType {
+    AGENT
+}
+
 enum LoanStatus {
     PENDING
     APPROVED
@@ -71,6 +107,10 @@ model LoanApplication {
     guardianPhone  String
     guardianEmail  String
     relationship   String
+    partner        String     @default("VidyaShakti")
+    monthlyIncome  Int        @default(0)
+    bankStatement  String?
+    admissionDoc   String?
     fees           Float
     loanAmount     Float?
     interestRate   Float?

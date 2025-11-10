@@ -11,7 +11,13 @@ const PAYMENT_RECIEPT = {
   paymentReciept: "payment/reciept",
 };
 
+const OTHER_DOCS = {
+  bankStatement: "student/bank_statement",
+  admissionDoc: "student/admission_doc",
+};
+
 module.exports = {
   KYC_FILE_FIELDS,
-  PAYMENT_RECIEPT
+  PAYMENT_RECIEPT,
+  OTHER_DOCS
 };

@@ -3,7 +3,10 @@ const { asyncHandler } = require("../../utils/asyncHandler");
 
 const prisma = new PrismaClient();
 
+// ##########----------Create Loan Application----------##########
 const createLoanApplication = asyncHandler(async (req, res) => {
+    const userId = req.user;
+    
     const {
         applicantName,
         applicantPhone,
@@ -13,10 +16,30 @@ const createLoanApplication = asyncHandler(async (req, res) => {
         guardianPhone,
         guardianEmail,
         relationship,
-        fees
+        fees,
+        partner,
+        monthlyIncome,
     } = req.body;
+    
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
 
     const refId = `L2G${Date.now()}${Math.floor(Math.random() * 1000)}`;
+
+    const bankStatementFile = req.files?.bankStatement?.[0];
+    const admissionDocFile = req.files?.admissionDoc?.[0];
+
+    const bankStatementUrl = bankStatementFile
+        ? `/uploads/kyc/student/bank_statement/${bankStatementFile.filename}`
+        : null;
+
+    const admissionDocUrl = admissionDocFile
+        ? `/uploads/kyc/student/admission_doc/${admissionDocFile.filename}`
+        : null;
 
     const loanApplication = await prisma.loanApplication.create({
         data: {
@@ -29,7 +52,11 @@ const createLoanApplication = asyncHandler(async (req, res) => {
             guardianPhone,
             guardianEmail,
             relationship,
-            fees
+            fees,
+            partner,
+            monthlyIncome,
+            bankStatement: bankStatementUrl,
+            admissionDoc: admissionDocUrl,
         },
     });
 
@@ -40,9 +67,18 @@ const createLoanApplication = asyncHandler(async (req, res) => {
     );
 });
 
+// ##########----------Submit KYC----------##########
 const submitKYC = asyncHandler(async (req, res) => {
+    const userId = req.user;
     const { loanApplicationId } = req.params;
     const { videoKycLink, isVKYCApproved } = req.body;
+    
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
 
     const isVKYCApprovedBool = isVKYCApproved === "true" || isVKYCApproved === true;
 
@@ -116,13 +152,22 @@ const submitKYC = asyncHandler(async (req, res) => {
     res.respond(200, "KYC documents submitted successfully", kyc);
 });
 
+// ##########----------Approve Loan----------##########
 const approveLoan = asyncHandler(async (req, res) => {
+    const userId = req.user;
     const { id } = req.params;
     const {
         loanAmount,
         interestRate,
         tenure
     } = req.body;
+
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
 
     if (!loanAmount || !interestRate || !tenure) {
         return res.respond(400, "Loan amount, interest rate, and tenure are required");
@@ -164,7 +209,17 @@ const approveLoan = asyncHandler(async (req, res) => {
     });
 });
 
+// ##########----------Get Pending Loans----------##########
 const getPendingLoans = asyncHandler(async (req, res) => {
+    const userId = req.user;
+    
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
+
     const pendingLoans = await prisma.loanApplication.findMany({
         where: {
             status: "PENDING",
@@ -194,8 +249,17 @@ const getPendingLoans = asyncHandler(async (req, res) => {
     res.respond(200, "Pending loans fetched successfully", pendingLoans);
 });
 
+// ##########----------Get Pending Loan Details----------##########
 const getPendingLoanDetails = asyncHandler(async (req, res) => {
     const { id } = req.params;
+    const userId = req.user;
+    
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
 
     const loanDetails = await prisma.loanApplication.findFirst({
         where: {
@@ -214,7 +278,17 @@ const getPendingLoanDetails = asyncHandler(async (req, res) => {
     res.respond(200, "Loan details fetched successfully", loanDetails);
 });
 
+// ##########----------Get Approved Loans----------##########
 const getApprovedLoans = asyncHandler(async (req, res) => {
+    const userId = req.user;
+    
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
+
     const approvedLoans = await prisma.loanApplication.findMany({
         where: {
             status: "APPROVED",
@@ -239,7 +313,17 @@ const getApprovedLoans = asyncHandler(async (req, res) => {
     res.respond(200, "Approved loans fetched successfully", approvedLoans);
 });
 
+// ##########----------Get Approved Loan Details----------##########
 const getApprovedLoanDetails = asyncHandler(async (req, res) => {
+    const userId = req.user;
+    
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
+    
     const { id } = req.params;
 
     const loanDetails = await prisma.loanApplication.findFirst({

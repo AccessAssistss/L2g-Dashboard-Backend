@@ -3,13 +3,23 @@ const { asyncHandler } = require("../../utils/asyncHandler");
 
 const prisma = new PrismaClient();
 
+// ##########----------Disburse Loan----------##########
 const disburseLoan = asyncHandler(async (req, res) => {
+    const userId = req.user;
+    
     const { loanApplicationId } = req.params;
     const {
         advanceEMIPaid = false,
         advanceEMIAmount = 0,
         interestPaidBy
     } = req.body;
+    
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
 
     const loanApplication = await prisma.loanApplication.findUnique({
         where: { id: loanApplicationId },
@@ -119,7 +129,17 @@ const disburseLoan = asyncHandler(async (req, res) => {
     res.respond(200, "Loan disbursed successfully. EMI schedule created.", result);
 });
 
+// ##########----------Get Disbursed Loans----------##########
 const getDisbursedLoans = asyncHandler(async (req, res) => {
+    const userId = req.user;
+    
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
+    
     const disbursedLoans = await prisma.loanApplication.findMany({
         where: {
             status: "DISBURSED",
@@ -160,8 +180,17 @@ const getDisbursedLoans = asyncHandler(async (req, res) => {
     res.respond(200, "Disbursed loans fetched successfully", disbursedLoans);
 });
 
+// ##########----------Get Disbursed Loan Details----------##########
 const getDisbursedLoanDetails = asyncHandler(async (req, res) => {
     const { id } = req.params;
+    const userId = req.user;
+    
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
 
     const loanDetails = await prisma.loanApplication.findFirst({
         where: {

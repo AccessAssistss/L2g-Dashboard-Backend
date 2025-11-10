@@ -1,3 +1,4 @@
+// ##########----------Loan Application Model----------##########
 model LoanApplication {
     id             String     @id @default(uuid())
     refId          String     @unique
@@ -9,6 +10,10 @@ model LoanApplication {
     guardianPhone  String
     guardianEmail  String
     relationship   String
+    partner        String     @default("VidyaShakti")
+    monthlyIncome  Int        @default(0)
+    bankStatement  String?
+    admissionDoc   String?
     fees           Float
     loanAmount     Float?
     interestRate   Float?
@@ -25,6 +30,7 @@ model LoanApplication {
     closureCertificate ClosureCertificate?
 }
 
+// ##########----------KYC Model----------##########
 model KYC {
     id                  String    @id @default(uuid())
     loanApplicationId   String    @unique
@@ -42,6 +48,7 @@ model KYC {
     loanApplication LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
 }
 
+// ##########----------E-NACH Mandate Model----------##########
 model ENachMandate {
     id                String        @id @default(uuid())
     loanApplicationId String        @unique
@@ -65,6 +72,7 @@ model ENachMandate {
     autoPayments    AutoPayment[]
 }
 
+// ##########----------EMI Schedule Model----------##########
 model EMISchedule {
     id            String    @id @default(uuid())
     mandateId     String
@@ -82,6 +90,7 @@ model EMISchedule {
     mandate ENachMandate @relation(fields: [mandateId], references: [id], onDelete: Cascade)
 }
 
+// ##########----------Auto Payment Model----------##########
 model AutoPayment {
     id                String        @id @default(uuid())
     mandateId         String
@@ -102,6 +111,7 @@ model AutoPayment {
     mandate ENachMandate @relation(fields: [mandateId], references: [id], onDelete: Cascade)
 }
 
+// ##########----------Disbursement Model----------##########
 model Disbursement {
     id                String          @id @default(uuid())
     loanApplicationId String          @unique
@@ -116,6 +126,7 @@ model Disbursement {
     loanApplication LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
 }
 
+// ##########----------Loan Account Model----------##########
 model LoanAccount {
     id                String      @id @default(uuid())
     loanAccountNo     String      @unique
@@ -132,6 +143,7 @@ model LoanAccount {
     loanApplication LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
 }
 
+// ##########----------Repayment Model----------##########
 model Repayment {
     id               String      @id @default(uuid())
     loanAccountId    String
@@ -149,6 +161,7 @@ model Repayment {
     loanAccount LoanAccount @relation(fields: [loanAccountId], references: [id], onDelete: Cascade)
 }
 
+// ##########----------UTR Detail Model----------##########
 model UTRDetail {
     id            String      @id @default(uuid())
     loanAccountId String
@@ -163,6 +176,7 @@ model UTRDetail {
     loanAccount LoanAccount @relation(fields: [loanAccountId], references: [id], onDelete: Cascade)
 }
 
+// ##########----------Closure Certificate Model----------##########
 model ClosureCertificate {
     id                String   @id @default(uuid())
     loanApplicationId String   @unique
