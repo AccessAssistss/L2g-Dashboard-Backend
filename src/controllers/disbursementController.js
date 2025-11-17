@@ -6,14 +6,14 @@ const prisma = new PrismaClient();
 // ##########----------Disburse Loan----------##########
 const disburseLoan = asyncHandler(async (req, res) => {
     const userId = req.user;
-    
+
     const { loanApplicationId } = req.params;
     const {
         advanceEMIPaid = false,
         advanceEMIAmount = 0,
         interestPaidBy
     } = req.body;
-    
+
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
     });
@@ -32,17 +32,17 @@ const disburseLoan = asyncHandler(async (req, res) => {
         return res.respond(404, "Loan application not found");
     }
 
-    if (loanApplication.status !== "ENACH_ACTIVE") {
-        return res.respond(400, "e-NACH must be activated before disbursement. Current status: " + loanApplication.status);
-    }
+    // if (loanApplication.status !== "ENACH_ACTIVE") {
+    //     return res.respond(400, "e-NACH must be activated before disbursement. Current status: " + loanApplication.status);
+    // }
 
-    if (!loanApplication.eNachMandate) {
-        return res.respond(400, "e-NACH mandate not found");
-    }
+    // if (!loanApplication.eNachMandate) {
+    //     return res.respond(400, "e-NACH mandate not found");
+    // }
 
-    if (loanApplication.eNachMandate.status !== "ACTIVE") {
-        return res.respond(400, "e-NACH mandate is not active. Status: " + loanApplication.eNachMandate.status);
-    }
+    // if (loanApplication.eNachMandate.status !== "ACTIVE") {
+    //     return res.respond(400, "e-NACH mandate is not active. Status: " + loanApplication.eNachMandate.status);
+    // }
 
     const existingDisbursement = await prisma.disbursement.findUnique({
         where: { loanApplicationId }
@@ -132,14 +132,14 @@ const disburseLoan = asyncHandler(async (req, res) => {
 // ##########----------Get Disbursed Loans----------##########
 const getDisbursedLoans = asyncHandler(async (req, res) => {
     const userId = req.user;
-    
+
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
     });
     if (!user) {
         return res.respond(404, "User not found");
     }
-    
+
     const disbursedLoans = await prisma.loanApplication.findMany({
         where: {
             status: "DISBURSED",
@@ -184,7 +184,7 @@ const getDisbursedLoans = asyncHandler(async (req, res) => {
 const getDisbursedLoanDetails = asyncHandler(async (req, res) => {
     const { id } = req.params;
     const userId = req.user;
-    
+
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
     });

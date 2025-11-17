@@ -5,6 +5,7 @@ const xlsx = require("xlsx");
 const fs = require("fs");
 const path = require("path");
 const moment = require("moment");
+const { parseFlexibleDate } = require("../../helper/dateParser");
 
 const prisma = new PrismaClient();
 
@@ -34,8 +35,9 @@ const processRepayment = asyncHandler(async (req, res) => {
         return res.respond(404, "Loan account not found");
     }
 
-    const parsedPaymentDate = new Date(paymentDate);
-    if (isNaN(parsedPaymentDate.getTime())) {
+    const parsedPaymentDate = parseFlexibleDate(paymentDate);
+
+    if (!parsedPaymentDate) {
         return res.respond(400, "Invalid payment date");
     }
 

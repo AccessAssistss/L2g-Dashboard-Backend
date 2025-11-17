@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 // ##########----------Create Loan Application----------##########
 const createLoanApplication = asyncHandler(async (req, res) => {
     const userId = req.user;
-    
+
     const {
         applicantName,
         applicantPhone,
@@ -20,7 +20,7 @@ const createLoanApplication = asyncHandler(async (req, res) => {
         partner,
         monthlyIncome,
     } = req.body;
-    
+
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
     });
@@ -52,9 +52,9 @@ const createLoanApplication = asyncHandler(async (req, res) => {
             guardianPhone,
             guardianEmail,
             relationship,
-            fees,
+            fees: fees ? parseFloat(fees) : null,
+            monthlyIncome: monthlyIncome ? parseInt(monthlyIncome) : 0,
             partner,
-            monthlyIncome,
             bankStatement: bankStatementUrl,
             admissionDoc: admissionDocUrl,
         },
@@ -72,7 +72,7 @@ const submitKYC = asyncHandler(async (req, res) => {
     const userId = req.user;
     const { loanApplicationId } = req.params;
     const { videoKycLink, isVKYCApproved } = req.body;
-    
+
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
     });
@@ -209,10 +209,52 @@ const approveLoan = asyncHandler(async (req, res) => {
     });
 });
 
+// ##########----------Get All Loans----------##########
+const getAllLoans = asyncHandler(async (req, res) => {
+    const userId = req.user;
+
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
+
+    const pendingLoans = await prisma.loanApplication.findMany({
+        where: {},
+        select: {
+            id: true,
+            refId: true,
+            applicantName: true,
+            applicantPhone: true,
+            applicantEmail: true,
+            course: true,
+            applicantEmail: true,
+            guardianName: true,
+            guardianEmail: true,
+            partner: true,
+            loanAmount: true,
+            interestRate: true,
+            tenure: true,
+            kyc: {
+                select: {
+                    id: true,
+                    isVKYCApproved: true,
+                },
+            },
+        },
+        orderBy: {
+            createdAt: "desc",
+        },
+    });
+
+    res.respond(200, "Pending loans fetched successfully", pendingLoans);
+});
+
 // ##########----------Get Pending Loans----------##########
 const getPendingLoans = asyncHandler(async (req, res) => {
     const userId = req.user;
-    
+
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
     });
@@ -253,7 +295,7 @@ const getPendingLoans = asyncHandler(async (req, res) => {
 const getPendingLoanDetails = asyncHandler(async (req, res) => {
     const { id } = req.params;
     const userId = req.user;
-    
+
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
     });
@@ -281,7 +323,7 @@ const getPendingLoanDetails = asyncHandler(async (req, res) => {
 // ##########----------Get Approved Loans----------##########
 const getApprovedLoans = asyncHandler(async (req, res) => {
     const userId = req.user;
-    
+
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
     });
@@ -316,14 +358,14 @@ const getApprovedLoans = asyncHandler(async (req, res) => {
 // ##########----------Get Approved Loan Details----------##########
 const getApprovedLoanDetails = asyncHandler(async (req, res) => {
     const userId = req.user;
-    
+
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
     });
     if (!user) {
         return res.respond(404, "User not found");
     }
-    
+
     const { id } = req.params;
 
     const loanDetails = await prisma.loanApplication.findFirst({
@@ -347,6 +389,7 @@ module.exports = {
     createLoanApplication,
     submitKYC,
     approveLoan,
+    getAllLoans,
     getPendingLoans,
     getPendingLoanDetails,
     getApprovedLoans,

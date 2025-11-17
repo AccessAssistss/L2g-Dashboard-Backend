@@ -7,6 +7,7 @@ const {
     approveLoan,
     getApprovedLoans,
     getApprovedLoanDetails,
+    getAllLoans,
 } = require("../controllers/loanApplicationController");
 const multerErrorHandler = require("../../middleware/multerErrorHandler");
 const createUploadMiddleware = require("../../middleware/upload");
@@ -21,6 +22,7 @@ const uploadOtherFiles = createUploadMiddleware("OTHER", OTHER_DOCS);
 router.post("/createLoanApplication", validateToken, uploadOtherFiles, multerErrorHandler, createLoanApplication);
 router.post("/submitKYC/:loanApplicationId", validateToken, uploadEmployerFiles, multerErrorHandler, submitKYC);
 router.post("/approveLoan/:id", validateToken, approveLoan);
+router.get("/getAllLoans", validateToken, getAllLoans);
 router.get("/getPendingLoans", validateToken, getPendingLoans);
 router.get("/getPendingLoanDetails/:id", validateToken, getPendingLoanDetails);
 router.get("/getApprovedLoans", validateToken, getApprovedLoans);
