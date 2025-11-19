@@ -9,7 +9,7 @@ const upload = multer({ dest: "uploads/" });
 
 const router = express.Router();
 
-const uploadEmployerFiles = createUploadMiddleware("payment", PAYMENT_RECIEPT);
+const uploadEmployerFiles = createUploadMiddleware("loan", PAYMENT_RECIEPT);
 
 router.post("/processRepayment/:loanApplicationId", validateToken, uploadEmployerFiles, multerErrorHandler, processRepayment);
 router.get("/getRepaymentHistory/:loanApplicationId", validateToken, getRepaymentHistory);

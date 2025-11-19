@@ -132,6 +132,7 @@ const disburseLoan = asyncHandler(async (req, res) => {
 // ##########----------Get Disbursed Loans----------##########
 const getDisbursedLoans = asyncHandler(async (req, res) => {
     const userId = req.user;
+    const { page = 1, limit = 10, search = "" } = req.query;
 
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
@@ -140,10 +141,29 @@ const getDisbursedLoans = asyncHandler(async (req, res) => {
         return res.respond(404, "User not found");
     }
 
+    const skip = (page - 1) * limit;
+
+    const searchFilter = search
+        ? {
+              OR: [
+                  { applicantName: { contains: search, mode: "insensitive" } },
+                  { applicantPhone: { contains: search } },
+                  { applicantEmail: { contains: search, mode: "insensitive" } },
+                  { guardianName: { contains: search, mode: "insensitive" } },
+                  { guardianPhone: { contains: search } },
+                  { refId: { contains: search, mode: "insensitive" } },
+              ],
+          }
+        : {};
+
+    const total = await prisma.loanApplication.count({
+        where: { status: "DISBURSED", ...searchFilter }
+    });
+
     const disbursedLoans = await prisma.loanApplication.findMany({
-        where: {
-            status: "DISBURSED",
-        },
+        where: { status: "DISBURSED", ...searchFilter },
+        skip: Number(skip),
+        take: Number(limit),
         select: {
             id: true,
             refId: true,
@@ -177,7 +197,12 @@ const getDisbursedLoans = asyncHandler(async (req, res) => {
         },
     });
 
-    res.respond(200, "Disbursed loans fetched successfully", disbursedLoans);
+    res.respond(200, "Disbursed loans fetched successfully", {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        data: disbursedLoans
+    });
 });
 
 // ##########----------Get Disbursed Loan Details----------##########

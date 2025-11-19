@@ -1,23 +1,55 @@
-const axios = require("axios");
+const crypto = require('crypto');
 
-const sendWhatsAppMessage = async () => {
-    try {
-        const response = await axios.post("https://backend.aisensy.com/campaign/t1/api/v2", {
-            apiKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4ZTRiYTg2OGJlMmRmMGQ1YjA4MGE1MSIsIm5hbWUiOiJMb2FuMmdyb3cgRmluY2FwIFB2dCBMdGQiLCJhcHBOYW1lIjoiQWlTZW5zeSIsImNsaWVudElkIjoiNjhlNGJhODY4YmUyZGYwZDViMDgwYTRiIiwiYWN0aXZlUGxhbiI6IkZSRUVfRk9SRVZFUiIsImlhdCI6MTc1OTgyMDQyMn0.5lJAJUjH3vfV5WfCopz4M2VjeZouyVBoyD6J1DvQifU",
-            campaignName: "EMI Bounce Alert",
-            destination: "917388729386",
-            userName: "Sourabh",
-            templateParams: ["Jaspreet", "2000", "LOAN2025"],
-            source: "66306eb8_3073_4c01_a5a1_90769095a932",
-            media: { type: "text" },
-            templateName: "emi_bounce_alert",
-            language: "en"
-        });
-
-        console.log("Response:", response.data);
-    } catch (error) {
-        console.error("Error sending WhatsApp message:", error.response?.data || error.message);
-    }
+// Test webhook signature generation
+const testWebhook = () => {
+    // Your webhook secret from .env
+    const WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || 'your_webhook_secret_here';
+    
+    // Test payload
+    const payload = {
+        "event": "token.confirmed",
+        "payload": {
+            "token": {
+                "entity": {
+                    "id": "token_MbK8RHzXxbwTLq",
+                    "order_id": "order_MbK7HwNkpBQjTd",
+                    "customer_id": "cust_MbK6EqWaCFQE4J",
+                    "method": "emandate",
+                    "bank_account": {
+                        "account_number": "1234567890",
+                        "ifsc": "HDFC0001234",
+                        "account_type": "savings",
+                        "beneficiary_name": "John Doe"
+                    },
+                    "status": "confirmed",
+                    "created_at": 1234567890
+                }
+            }
+        }
+    };
+    
+    const body = JSON.stringify(payload);
+    
+    // Generate signature
+    const signature = crypto
+        .createHmac('sha256', WEBHOOK_SECRET)
+        .update(body)
+        .digest('hex');
+    
+    console.log('=== WEBHOOK TEST DATA ===\n');
+    console.log('Webhook Secret:', WEBHOOK_SECRET);
+    console.log('\nPayload:\n', body);
+    console.log('\nGenerated Signature:', signature);
+    console.log('\n=== CURL COMMAND ===\n');
+    console.log(`curl -X POST https://backend.l2gfincap.in/api/v1/webhook/razorpay \\
+  -H "Content-Type: application/json" \\
+  -H "x-razorpay-signature: ${signature}" \\
+  -d '${body}'`);
+    console.log('\n====================\n');
 };
 
-sendWhatsAppMessage();
+// Run test
+testWebhook();
+
+// Also export for use in other files
+module.exports = { testWebhook };

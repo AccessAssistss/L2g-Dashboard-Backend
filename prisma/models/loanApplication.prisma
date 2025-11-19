@@ -55,9 +55,9 @@ model ENachMandate {
     mandateId         String        @unique
     tokenId           String?       @unique
     customerId        String
-    bankAccountNo     String
-    ifscCode          String
-    accountType       String
+    bankAccountNo     String        @default("")
+    ifscCode          String        @default("")
+    accountType       String        @default("savings")
     maxAmount         Float
     startDate         DateTime
     endDate           DateTime?

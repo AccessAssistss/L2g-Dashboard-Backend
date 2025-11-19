@@ -43,31 +43,35 @@ model CustomUser {
 // enums.prisma
 // ##########----------Custom User Enums----------##########
 enum UserType {
-    AGENT
+  AGENT
 }
 
+// ##########----------Loan Status Enums----------##########
 enum LoanStatus {
-    PENDING
-    APPROVED
-    ENACH_PENDING
-    ENACH_ACTIVE
-    DISBURSED
-    CLOSED
+  PENDING
+  APPROVED
+  ENACH_PENDING
+  ENACH_ACTIVE
+  DISBURSED
+  CLOSED
 }
 
+// ##########----------Payment Mode Enums----------##########
 enum PaymentMode {
-    ONLINE
-    CASH
-    CHEQUE
-    BANK_TRANSFER
-    UPI
+  ONLINE
+  CASH
+  CHEQUE
+  BANK_TRANSFER
+  UPI
 }
 
+// ##########----------Interest Paid By Enums----------##########
 enum InterestPaidBy {
-    STUDENT
-    COLLEGE
+  STUDENT
+  COLLEGE
 }
 
+// ##########----------Mandate Status Enums----------##########
 enum MandateStatus {
   CREATED
   AUTHENTICATED
@@ -78,6 +82,7 @@ enum MandateStatus {
   COMPLETED
 }
 
+// ##########----------EMI Status Enums----------##########
 enum EMIStatus {
   PENDING
   SCHEDULED
@@ -87,6 +92,7 @@ enum EMIStatus {
   SKIPPED
 }
 
+// ##########----------Payment Status Enums----------##########
 enum PaymentStatus {
   CREATED
   AUTHORIZED
@@ -95,7 +101,9 @@ enum PaymentStatus {
   REFUNDED
 }
 
+
 // loanApplication.prisma
+// ##########----------Loan Application Model----------##########
 model LoanApplication {
     id             String     @id @default(uuid())
     refId          String     @unique
@@ -127,6 +135,7 @@ model LoanApplication {
     closureCertificate ClosureCertificate?
 }
 
+// ##########----------KYC Model----------##########
 model KYC {
     id                  String    @id @default(uuid())
     loanApplicationId   String    @unique
@@ -144,15 +153,16 @@ model KYC {
     loanApplication LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
 }
 
+// ##########----------E-NACH Mandate Model----------##########
 model ENachMandate {
     id                String        @id @default(uuid())
     loanApplicationId String        @unique
     mandateId         String        @unique
     tokenId           String?       @unique
     customerId        String
-    bankAccountNo     String
-    ifscCode          String
-    accountType       String
+    bankAccountNo     String        @default("")
+    ifscCode          String        @default("")
+    accountType       String        @default("savings")
     maxAmount         Float
     startDate         DateTime
     endDate           DateTime?
@@ -167,6 +177,7 @@ model ENachMandate {
     autoPayments    AutoPayment[]
 }
 
+// ##########----------EMI Schedule Model----------##########
 model EMISchedule {
     id            String    @id @default(uuid())
     mandateId     String
@@ -184,6 +195,7 @@ model EMISchedule {
     mandate ENachMandate @relation(fields: [mandateId], references: [id], onDelete: Cascade)
 }
 
+// ##########----------Auto Payment Model----------##########
 model AutoPayment {
     id                String        @id @default(uuid())
     mandateId         String
@@ -204,6 +216,7 @@ model AutoPayment {
     mandate ENachMandate @relation(fields: [mandateId], references: [id], onDelete: Cascade)
 }
 
+// ##########----------Disbursement Model----------##########
 model Disbursement {
     id                String          @id @default(uuid())
     loanApplicationId String          @unique
@@ -218,6 +231,7 @@ model Disbursement {
     loanApplication LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
 }
 
+// ##########----------Loan Account Model----------##########
 model LoanAccount {
     id                String      @id @default(uuid())
     loanAccountNo     String      @unique
@@ -234,6 +248,7 @@ model LoanAccount {
     loanApplication LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
 }
 
+// ##########----------Repayment Model----------##########
 model Repayment {
     id               String      @id @default(uuid())
     loanAccountId    String
@@ -251,6 +266,7 @@ model Repayment {
     loanAccount LoanAccount @relation(fields: [loanAccountId], references: [id], onDelete: Cascade)
 }
 
+// ##########----------UTR Detail Model----------##########
 model UTRDetail {
     id            String      @id @default(uuid())
     loanAccountId String
@@ -265,6 +281,7 @@ model UTRDetail {
     loanAccount LoanAccount @relation(fields: [loanAccountId], references: [id], onDelete: Cascade)
 }
 
+// ##########----------Closure Certificate Model----------##########
 model ClosureCertificate {
     id                String   @id @default(uuid())
     loanApplicationId String   @unique

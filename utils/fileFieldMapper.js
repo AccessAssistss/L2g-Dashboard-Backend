@@ -8,7 +8,7 @@ const KYC_FILE_FIELDS = {
 };
 
 const PAYMENT_RECIEPT = {
-  paymentReciept: "payment/reciept",
+  paymentReciept: "loan/reciept",
 };
 
 const OTHER_DOCS = {

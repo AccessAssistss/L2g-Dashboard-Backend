@@ -8,19 +8,13 @@ const prisma = new PrismaClient();
 // ##########----------Activate E-Nach----------##########
 const activateENach = asyncHandler(async (req, res) => {
     const userId = req.user;
-
     const { loanApplicationId } = req.params;
-    const { bankAccountNo, ifscCode, accountType = "savings" } = req.body;
 
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
     });
     if (!user) {
         return res.respond(404, "User not found");
-    }
-
-    if (!bankAccountNo || !ifscCode) {
-        return res.respond(400, "Bank account number and IFSC code are required");
     }
 
     const loanApplication = await prisma.loanApplication.findUnique({
@@ -65,15 +59,15 @@ const activateENach = asyncHandler(async (req, res) => {
             } else throw err;
         }
 
-        const maxAmount = loanApplication.emiAmount * 1.1;
+        const maxAmount = loanApplication.emiAmount * 1.5;
         const startDate = new Date();
         startDate.setMonth(startDate.getMonth() + 1);
-        startDate.setDate(1);
+        startDate.setDate(5);
 
         const endDate = new Date(startDate);
-        endDate.setMonth(endDate.getMonth() + loanApplication.tenure);
+        endDate.setMonth(endDate.getMonth() + loanApplication.tenure + 1);
 
-        const registrationLink = await razorpayInstance.subscriptions.createRegistrationLink({
+        const nachRegistration = await razorpayInstance.subscriptions.createRegistrationLink({
             customer: {
                 name: loanApplication.applicantName,
                 email: loanApplication.applicantEmail,
@@ -82,24 +76,17 @@ const activateENach = asyncHandler(async (req, res) => {
             type: "link",
             amount: 0,
             currency: "INR",
-            description: `e-NACH Registration + First EMI Payment for Loan ${loanApplication.refId}`,
+            description: `e-NACH Registration for Loan ${loanApplication.refId}`,
             subscription_registration: {
-                first_payment_amount: Math.round(loanApplication.emiAmount * 100),
                 method: "emandate",
                 auth_type: "netbanking",
                 max_amount: Math.round(maxAmount * 100),
                 expire_at: Math.floor(endDate.getTime() / 1000),
-                bank_account: {
-                    beneficiary_name: loanApplication.applicantName,
-                    account_number: bankAccountNo,
-                    account_type: accountType,
-                    ifsc_code: ifscCode,
-                },
             },
             receipt: `ENACH_${loanApplication.refId}`,
             email_notify: true,
             sms_notify: true,
-            expire_by: Math.floor(endDate.getTime() / 1000),
+            expire_by: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60),
             notes: {
                 loan_ref_id: loanApplication.refId,
                 loan_application_id: loanApplicationId,
@@ -110,16 +97,16 @@ const activateENach = asyncHandler(async (req, res) => {
             const newMandate = await tx.eNachMandate.create({
                 data: {
                     loanApplicationId,
-                    mandateId: registrationLink.order_id,
+                    mandateId: nachRegistration.order_id,
                     customerId: customer.id,
-                    bankAccountNo,
-                    ifscCode,
-                    accountType,
+                    bankAccountNo: "",
+                    ifscCode: "",
+                    accountType: "",
                     maxAmount,
                     startDate,
                     endDate,
                     status: "CREATED",
-                    authLink: registrationLink.short_url
+                    authLink: nachRegistration.short_url
                 }
             });
 
@@ -135,7 +122,7 @@ const activateENach = asyncHandler(async (req, res) => {
             await sendENachActivationEmail({
                 email: loanApplication.applicantEmail,
                 name: loanApplication.applicantName,
-                authLink: registrationLink.short_url,
+                authLink: nachRegistration.short_url,
                 loanRefId: loanApplication.refId,
                 emiAmount: loanApplication.emiAmount,
                 tenure: loanApplication.tenure
@@ -144,17 +131,19 @@ const activateENach = asyncHandler(async (req, res) => {
             console.error("Email sending failed:", emailError);
         }
 
-        res.respond(200, "e-NACH activation initiated. Email sent to customer.", {
+        res.respond(200, "e-NACH activation link sent. Customer will choose bank account.", {
             mandate,
-            authLink: registrationLink.short_url,
-            invoiceId: registrationLink.id,
-            message: "Customer must complete authentication to activate e-NACH. Razorpay has sent SMS and Email."
+            authLink: nachRegistration.short_url,
+            invoiceId: nachRegistration.id,
+            orderId: nachRegistration.order_id,
+            message: "Customer will select their bank account during authentication. Bank details will be updated via webhook."
         });
 
     } catch (error) {
         console.error("e-NACH activation error:", error);
         res.respond(500, "Failed to activate e-NACH", {
-            error: error.message
+            error: error.message,
+            details: error.error?.description || null
         });
     }
 });
@@ -192,37 +181,59 @@ const checkENachStatus = asyncHandler(async (req, res) => {
     }
 
     try {
-        const token = await razorpayInstance.tokens.fetch(mandate.mandateId);
+        const invoice = await razorpayInstance.invoices.fetch(mandate.mandateId);
 
-        if (token.status === "confirmed" && mandate.status !== "ACTIVE") {
-            await prisma.$transaction(async (tx) => {
-                await tx.eNachMandate.update({
-                    where: { id: mandate.id },
-                    data: {
-                        status: "ACTIVE",
-                        tokenId: token.id
-                    }
-                });
+        console.log("Invoice status from Razorpay:", invoice.status);
 
-                await tx.loanApplication.update({
-                    where: { id: loanApplicationId },
-                    data: { status: "ENACH_ACTIVE" }
-                });
-            });
+        if (invoice.token_id && mandate.status !== "ACTIVE") {
+            try {
+                const token = await razorpayInstance.tokens.fetch(invoice.token_id);
+                
+                console.log("Token status:", token.status);
 
-            mandate.status = "ACTIVE";
+                if (token.status === "confirmed") {
+                    const bankAccount = token.bank_account || {};
+                    
+                    await prisma.$transaction(async (tx) => {
+                        await tx.eNachMandate.update({
+                            where: { id: mandate.id },
+                            data: {
+                                status: "ACTIVE",
+                                tokenId: token.id,
+                                bankAccountNo: bankAccount.account_number || mandate.bankAccountNo,
+                                ifscCode: bankAccount.ifsc || mandate.ifscCode,
+                                accountType: bankAccount.account_type || mandate.accountType
+                            }
+                        });
+
+                        await tx.loanApplication.update({
+                            where: { id: loanApplicationId },
+                            data: { status: "ENACH_ACTIVE" }
+                        });
+                    });
+
+                    mandate.status = "ACTIVE";
+                    mandate.tokenId = token.id;
+                }
+            } catch (tokenError) {
+                console.error("Error fetching token:", tokenError);
+            }
         }
 
         res.respond(200, "e-NACH status fetched successfully", {
             mandate,
-            razorpayStatus: token.status,
-            canDisburse: token.status === "confirmed"
+            invoiceStatus: invoice.status,
+            tokenId: invoice.token_id || null,
+            canDisburse: mandate.status === "ACTIVE",
+            authLink: mandate.authLink
         });
 
     } catch (error) {
+        console.error("Error fetching mandate status:", error);
         res.respond(200, "e-NACH status from database", {
             mandate,
-            note: "Could not fetch latest status from Razorpay"
+            note: "Could not fetch latest status from Razorpay. Please try again.",
+            error: error.message
         });
     }
 });
@@ -252,6 +263,10 @@ const resendENachLink = asyncHandler(async (req, res) => {
 
     if (mandate.status === "ACTIVE") {
         return res.respond(400, "e-NACH already activated");
+    }
+
+    if (!mandate.authLink) {
+        return res.respond(400, "No authentication link available. Please recreate the mandate.");
     }
 
     await sendENachActivationEmail({
@@ -324,7 +339,8 @@ const getPendingENachLoans = asyncHandler(async (req, res) => {
                     mandateId: true,
                     status: true,
                     authLink: true,
-                    createdAt: true
+                    createdAt: true,
+                    bankAccountNo: true
                 }
             }
         },
@@ -356,6 +372,7 @@ const getENachActiveLoans = asyncHandler(async (req, res) => {
                 select: {
                     id: true,
                     mandateId: true,
+                    tokenId: true,
                     status: true,
                     bankAccountNo: true,
                     maxAmount: true

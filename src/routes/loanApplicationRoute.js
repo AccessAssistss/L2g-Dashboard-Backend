@@ -17,7 +17,7 @@ const validateToken = require("../../middleware/validateJwtToken");
 const router = express.Router();
 
 const uploadEmployerFiles = createUploadMiddleware("kyc", KYC_FILE_FIELDS);
-const uploadOtherFiles = createUploadMiddleware("OTHER", OTHER_DOCS);
+const uploadOtherFiles = createUploadMiddleware("other", OTHER_DOCS);
 
 router.post("/createLoanApplication", validateToken, uploadOtherFiles, multerErrorHandler, createLoanApplication);
 router.post("/submitKYC/:loanApplicationId", validateToken, uploadEmployerFiles, multerErrorHandler, submitKYC);

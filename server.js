@@ -18,6 +18,12 @@ app.use(cors({
     origin: process.env.CORS_ORIGIN
 }));
 
+app.use(
+  "/api/v1/webhook",
+  express.raw({ type: "application/json" }),
+  require("./src/routes/razorpayWebhookRoute")
+);
+
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(responseMiddleware);
