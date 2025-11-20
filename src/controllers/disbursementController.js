@@ -9,9 +9,8 @@ const disburseLoan = asyncHandler(async (req, res) => {
 
     const { loanApplicationId } = req.params;
     const {
-        advanceEMIPaid = false,
+        advanceEMIPaid = true,
         advanceEMIAmount = 0,
-        interestPaidBy
     } = req.body;
 
     const user = await prisma.customUser.findUnique({
@@ -24,7 +23,8 @@ const disburseLoan = asyncHandler(async (req, res) => {
     const loanApplication = await prisma.loanApplication.findUnique({
         where: { id: loanApplicationId },
         include: {
-            eNachMandate: true
+            eNachMandate: true,
+            scheme: true
         }
     });
 
@@ -55,6 +55,7 @@ const disburseLoan = asyncHandler(async (req, res) => {
     const loanAmount = loanApplication.loanAmount;
     const interestRate = loanApplication.interestRate;
     const tenure = loanApplication.tenure;
+    const scheme = loanApplication.scheme;
 
     const result = await prisma.$transaction(async (tx) => {
         const disbursement = await tx.disbursement.create({
@@ -65,19 +66,48 @@ const disburseLoan = asyncHandler(async (req, res) => {
                 tenure,
                 advanceEMIPaid,
                 advanceEMIAmount: advanceEMIPaid ? advanceEMIAmount : 0,
-                interestPaidBy,
             },
         });
 
-        const totalInterest = (loanAmount * interestRate * tenure) / (12 * 100);
+        let totalInterest = 0;
+        let totalOutstanding = 0;
+        let remainingPrincipal = loanAmount;
+        let remainingInterest = 0;
+
+        if (scheme.interestPaidBy === "PARTNER") {
+            // Partner pays interest, student only pays principal
+            totalInterest = 0;
+            totalOutstanding = loanAmount;
+        } else if (scheme.interestType === "FLAT") {
+            // Flat interest
+            totalInterest = (loanAmount * interestRate * tenure) / (12 * 100);
+            totalOutstanding = loanAmount + totalInterest;
+        } else {
+            totalInterest = 0;
+            totalOutstanding = loanAmount;
+        }
+
         const advanceAmount = advanceEMIPaid ? (advanceEMIAmount || 0) : 0;
-        const totalOutstanding = loanAmount + totalInterest - advanceAmount;
-
-        const advanceInterestPortion = advanceAmount * (totalInterest / (loanAmount + totalInterest));
-        const advancePrincipalPortion = advanceAmount - advanceInterestPortion;
-
-        const remainingPrincipal = loanAmount - advancePrincipalPortion;
-        const remainingInterest = totalInterest - advanceInterestPortion;
+        
+        if (advanceAmount > 0) {
+            if (scheme.interestPaidBy === "PARTNER") {
+                remainingPrincipal = loanAmount - advanceAmount;
+                totalOutstanding = remainingPrincipal;
+            } else if (scheme.interestType === "FLAT") {
+                const advanceInterestPortion = advanceAmount * (totalInterest / (loanAmount + totalInterest));
+                const advancePrincipalPortion = advanceAmount - advanceInterestPortion;
+                remainingPrincipal = loanAmount - advancePrincipalPortion;
+                remainingInterest = totalInterest - advanceInterestPortion;
+                totalOutstanding = remainingPrincipal + remainingInterest;
+            } else {
+                remainingPrincipal = loanAmount - advanceAmount;
+                totalOutstanding = remainingPrincipal;
+            }
+        } else {
+            if (scheme.interestType === "FLAT" && scheme.interestPaidBy === "STUDENT") {
+                remainingInterest = totalInterest;
+            }
+        }
 
         const loanAccountNo = `LA${Date.now()}`;
 
@@ -170,11 +200,27 @@ const getDisbursedLoans = asyncHandler(async (req, res) => {
             applicantName: true,
             applicantPhone: true,
             applicantEmail: true,
-            course: true,
             loanAmount: true,
             interestRate: true,
             tenure: true,
             emiAmount: true,
+            partner: {
+                select: {
+                    name: true
+                }
+            },
+            course: {
+                select: {
+                    name: true
+                }
+            },
+            scheme: {
+                select: {
+                    schemeName: true,
+                    interestType: true,
+                    interestPaidBy: true
+                }
+            },
             loanAccount: {
                 select: {
                     id: true,
@@ -224,6 +270,9 @@ const getDisbursedLoanDetails = asyncHandler(async (req, res) => {
         },
         include: {
             kyc: true,
+            partner: true,
+            course: true,
+            scheme: true,
             disbursement: true,
             loanAccount: {
                 include: {

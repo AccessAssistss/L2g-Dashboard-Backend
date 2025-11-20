@@ -9,6 +9,20 @@ datasource db {
 }
 
 
+// admin.prisma
+// ##########----------Admin Model----------##########
+model Admin {
+    id           String   @id @default(uuid())
+    customUserId String   @unique
+    name         String
+    joiningDate  DateTime @default(now())
+    isActive     Boolean  @default(true)
+    createdAt    DateTime @default(now())
+    updatedAt    DateTime @updatedAt
+
+    customUser CustomUser @relation(fields: [customUserId], references: [id], onDelete: Cascade)
+}
+
 // agent.prisma
 model Agent {
     id            String     @id @default(uuid())
@@ -21,6 +35,22 @@ model Agent {
     updatedAt     DateTime   @updatedAt
 
     customUser    CustomUser @relation(fields: [customUserId], references: [id], onDelete: Cascade)
+}
+
+// course.prisma
+// ##########----------Course Model----------##########
+model Course {
+    id        String   @id @default(uuid())
+    partnerId String
+    name      String
+    code      String
+    isActive  Boolean  @default(true)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    partner      Partner           @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+    loanSchemes  LoanScheme[]
+    applications LoanApplication[]
 }
 
 // customUser.prisma
@@ -38,12 +68,21 @@ model CustomUser {
     updatedAt         DateTime @updatedAt
 
     agent             Agent?
+    admin             Admin?
 }
 
 // enums.prisma
 // ##########----------Custom User Enums----------##########
 enum UserType {
   AGENT
+  ADMIN
+}
+
+// ##########----------Gender Enums----------##########
+enum Gender {
+    MALE
+    FEMALE
+    OTHER
 }
 
 // ##########----------Loan Status Enums----------##########
@@ -56,6 +95,18 @@ enum LoanStatus {
   CLOSED
 }
 
+// ##########----------Interest Type Enums----------##########
+enum InterestType {
+    FLAT
+    REDUCING
+}
+
+// ##########----------Interest Paid By Enums----------##########
+enum InterestPaidBy {
+    STUDENT
+    PARTNER
+}
+
 // ##########----------Payment Mode Enums----------##########
 enum PaymentMode {
   ONLINE
@@ -63,12 +114,6 @@ enum PaymentMode {
   CHEQUE
   BANK_TRANSFER
   UPI
-}
-
-// ##########----------Interest Paid By Enums----------##########
-enum InterestPaidBy {
-  STUDENT
-  COLLEGE
 }
 
 // ##########----------Mandate Status Enums----------##########
@@ -107,15 +152,17 @@ enum PaymentStatus {
 model LoanApplication {
     id             String     @id @default(uuid())
     refId          String     @unique
+    partnerId       String
+    courseId        String
+    schemeId        String
     applicantName  String
     applicantPhone String
     applicantEmail String
-    course         String
+    applicantGender Gender
     guardianName   String
     guardianPhone  String
     guardianEmail  String
     relationship   String
-    partner        String     @default("VidyaShakti")
     monthlyIncome  Int        @default(0)
     bankStatement  String?
     admissionDoc   String?
@@ -127,6 +174,10 @@ model LoanApplication {
     status         LoanStatus @default(PENDING)
     createdAt      DateTime   @default(now())
     updatedAt      DateTime   @updatedAt
+
+    partner            Partner             @relation(fields: [partnerId], references: [id])
+    course             Course              @relation(fields: [courseId], references: [id])
+    scheme             LoanScheme          @relation(fields: [schemeId], references: [id])
 
     kyc                KYC?
     eNachMandate       ENachMandate?
@@ -291,4 +342,38 @@ model ClosureCertificate {
     updatedAt         DateTime @updatedAt
 
     loanApplication LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+}
+
+
+// loanScheme.prisma
+// ##########----------Loan Scheme Model----------##########
+model LoanScheme {
+    id             String        @id @default(uuid())
+    partnerId      String
+    courseId       String
+    schemeName     String        @unique
+    interestType   InterestType
+    interestPaidBy InterestPaidBy
+    isActive       Boolean       @default(true)
+    createdAt      DateTime      @default(now())
+    updatedAt      DateTime      @updatedAt
+
+    partner      Partner           @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+    course       Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+    applications LoanApplication[]
+}
+
+// partner.prisma
+// ##########----------Partner Model----------##########
+model Partner {
+    id        String   @id @default(uuid())
+    name      String   @unique
+    code      String   @unique
+    isActive  Boolean  @default(true)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    courses      Course[]
+    loanSchemes  LoanScheme[]
+    applications LoanApplication[]
 }

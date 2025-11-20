@@ -1,6 +1,14 @@
 // ##########----------Custom User Enums----------##########
 enum UserType {
   AGENT
+  ADMIN
+}
+
+// ##########----------Gender Enums----------##########
+enum Gender {
+    MALE
+    FEMALE
+    OTHER
 }
 
 // ##########----------Loan Status Enums----------##########
@@ -13,6 +21,18 @@ enum LoanStatus {
   CLOSED
 }
 
+// ##########----------Interest Type Enums----------##########
+enum InterestType {
+    FLAT
+    REDUCING
+}
+
+// ##########----------Interest Paid By Enums----------##########
+enum InterestPaidBy {
+    STUDENT
+    PARTNER
+}
+
 // ##########----------Payment Mode Enums----------##########
 enum PaymentMode {
   ONLINE
@@ -20,12 +40,6 @@ enum PaymentMode {
   CHEQUE
   BANK_TRANSFER
   UPI
-}
-
-// ##########----------Interest Paid By Enums----------##########
-enum InterestPaidBy {
-  STUDENT
-  COLLEGE
 }
 
 // ##########----------Mandate Status Enums----------##########

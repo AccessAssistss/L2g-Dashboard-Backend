@@ -1,0 +1,12 @@
+// ##########----------Admin Model----------##########
+model Admin {
+    id           String   @id @default(uuid())
+    customUserId String   @unique
+    name         String
+    joiningDate  DateTime @default(now())
+    isActive     Boolean  @default(true)
+    createdAt    DateTime @default(now())
+    updatedAt    DateTime @updatedAt
+
+    customUser CustomUser @relation(fields: [customUserId], references: [id], onDelete: Cascade)
+}

@@ -1,0 +1,16 @@
+// ##########----------Loan Scheme Model----------##########
+model LoanScheme {
+    id             String        @id @default(uuid())
+    partnerId      String
+    courseId       String
+    schemeName     String        @unique
+    interestType   InterestType
+    interestPaidBy InterestPaidBy
+    isActive       Boolean       @default(true)
+    createdAt      DateTime      @default(now())
+    updatedAt      DateTime      @updatedAt
+
+    partner      Partner           @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+    course       Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+    applications LoanApplication[]
+}

@@ -12,4 +12,5 @@ model CustomUser {
     updatedAt         DateTime @updatedAt
 
     agent             Agent?
+    admin             Admin?
 }

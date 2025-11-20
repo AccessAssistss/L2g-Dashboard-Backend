@@ -1,0 +1,13 @@
+// ##########----------Partner Model----------##########
+model Partner {
+    id        String   @id @default(uuid())
+    name      String   @unique
+    code      String   @unique
+    isActive  Boolean  @default(true)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    courses      Course[]
+    loanSchemes  LoanScheme[]
+    applications LoanApplication[]
+}

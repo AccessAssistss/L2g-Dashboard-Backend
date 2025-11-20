@@ -1,0 +1,14 @@
+// ##########----------Course Model----------##########
+model Course {
+    id        String   @id @default(uuid())
+    partnerId String
+    name      String
+    code      String
+    isActive  Boolean  @default(true)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    partner      Partner           @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+    loanSchemes  LoanScheme[]
+    applications LoanApplication[]
+}

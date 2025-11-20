@@ -29,8 +29,14 @@ const processRepayment = asyncHandler(async (req, res) => {
 
     const loanAccount = await prisma.loanAccount.findUnique({
         where: { loanApplicationId: loanApplicationId },
+        include: {
+            loanApplication: {
+                include: {
+                    scheme: true
+                }
+            }
+        }
     });
-
     if (!loanAccount) {
         return res.respond(404, "Loan account not found");
     }
@@ -60,15 +66,47 @@ const processRepayment = asyncHandler(async (req, res) => {
         ? `/uploads/loan/payment/reciept/${paymentRecieptFile.filename}`
         : null;
 
-    const totalRemaining = principalAmount + interestAmount;
-    const interestPortion = totalRemaining > 0
-        ? (amountPaidFloat * interestAmount) / totalRemaining
-        : 0;
-    const principalPortion = amountPaidFloat - interestPortion;
+    const scheme = loanAccount.loanApplication.scheme;
+    const loanApp = loanAccount.loanApplication;
 
-    const newInterestAmount = Math.max(0, interestAmount - interestPortion);
-    const newPrincipalAmount = Math.max(0, principalAmount - principalPortion);
-    const newTotalOutstanding = Math.max(0, totalOutstanding - amountPaidFloat);
+    let interestPortion = 0;
+    let principalPortion = 0;
+    let newInterestAmount = 0;
+    let newPrincipalAmount = 0;
+    let newTotalOutstanding = 0;
+
+
+    if (scheme.interestPaidBy === "PARTNER") {
+        principalPortion = amountPaidFloat;
+        interestPortion = 0;
+        newPrincipalAmount = Math.max(0, principalAmount - principalPortion);
+        newInterestAmount = 0;
+        newTotalOutstanding = newPrincipalAmount;
+    } else if (scheme.interestType === "FLAT") {
+        const totalRemaining = principalAmount + interestAmount;
+        interestPortion = totalRemaining > 0
+            ? (amountPaidFloat * interestAmount) / totalRemaining
+            : 0;
+        principalPortion = amountPaidFloat - interestPortion;
+
+        newInterestAmount = Math.max(0, interestAmount - interestPortion);
+        newPrincipalAmount = Math.max(0, principalAmount - principalPortion);
+        newTotalOutstanding = newPrincipalAmount + newInterestAmount;
+    } else {
+        const monthlyRate = (loanApp.interestRate / 12) / 100;
+        interestPortion = principalAmount * monthlyRate;
+
+        if (interestPortion > amountPaidFloat) {
+            interestPortion = amountPaidFloat;
+            principalPortion = 0;
+        } else {
+            principalPortion = amountPaidFloat - interestPortion;
+        }
+
+        newPrincipalAmount = Math.max(0, principalAmount - principalPortion);
+        newInterestAmount = 0;
+        newTotalOutstanding = newPrincipalAmount;
+    }
 
     const result = await prisma.$transaction(async (tx) => {
         const repayment = await tx.repayment.create({
@@ -133,6 +171,12 @@ const getRepaymentHistory = asyncHandler(async (req, res) => {
                 select: {
                     applicantName: true,
                     refId: true,
+                    scheme: {
+                        select: {
+                            interestType: true,
+                            interestPaidBy: true
+                        }
+                    }
                 },
             },
         },
@@ -194,10 +238,19 @@ const getClosedLoans = asyncHandler(async (req, res) => {
             applicantName: true,
             applicantPhone: true,
             applicantEmail: true,
-            course: true,
             loanAmount: true,
             interestRate: true,
             tenure: true,
+            partner: {
+                select: {
+                    name: true
+                }
+            },
+            course: {
+                select: {
+                    name: true
+                }
+            },
             loanAccount: {
                 select: {
                     id: true,
@@ -266,7 +319,6 @@ const sendBulkEmiReminderMessagesFromExcel = asyncHandler(async (req, res) => {
         const guardianMobile = String(row['Guardian Mobile'] || row['Guardian Number'] || row.guardian_mobile || row.gmobile || '').trim();
         const emiAmount = row['Emi Amount'] || row.emi || row.EMI_Amount || row.amount;
         const loanAccountNo = row['Loan No'] || row.loan || row.Loan_Account_No || row.account;
-        // const dueDateRaw = row['Due Date'] || row.Date || row.date || row.dueDate || null;
 
         const emiDateRaw = row['Due Date'] || row.Date || row.date || row.dueDate || "N/A";
 

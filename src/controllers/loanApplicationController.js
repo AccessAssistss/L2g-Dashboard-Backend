@@ -1,5 +1,6 @@
 const { PrismaClient } = require("@prisma/client");
 const { asyncHandler } = require("../../utils/asyncHandler");
+const { calculateEMI } = require("../../helper/calculateEMI");
 
 const prisma = new PrismaClient();
 
@@ -8,16 +9,18 @@ const createLoanApplication = asyncHandler(async (req, res) => {
     const userId = req.user;
 
     const {
+        partnerId,
+        courseId,
+        schemeId,
         applicantName,
         applicantPhone,
         applicantEmail,
-        course,
+        applicantGender,
         guardianName,
         guardianPhone,
         guardianEmail,
         relationship,
         fees,
-        partner,
         monthlyIncome,
     } = req.body;
 
@@ -26,6 +29,35 @@ const createLoanApplication = asyncHandler(async (req, res) => {
     });
     if (!user) {
         return res.respond(404, "User not found");
+    }
+
+    if (!partnerId || !courseId || !schemeId) {
+        return res.respond(400, "Partner, Course and Scheme are required");
+    }
+
+    if (!applicantGender || !["MALE", "FEMALE", "OTHER"].includes(applicantGender)) {
+        return res.respond(400, "Valid applicant gender is required (MALE, FEMALE, OTHER)");
+    }
+
+    const partner = await prisma.partner.findUnique({
+        where: { id: partnerId }
+    });
+    if (!partner) {
+        return res.respond(404, "Partner not found");
+    }
+
+    const course = await prisma.course.findUnique({
+        where: { id: courseId }
+    });
+    if (!course || course.partnerId !== partnerId) {
+        return res.respond(404, "Course not found or does not belong to selected partner");
+    }
+
+    const scheme = await prisma.loanScheme.findUnique({
+        where: { id: schemeId }
+    });
+    if (!scheme || scheme.partnerId !== partnerId || scheme.courseId !== courseId) {
+        return res.respond(404, "Scheme not found or does not belong to selected partner and course");
     }
 
     const refId = `L2G${Date.now()}${Math.floor(Math.random() * 1000)}`;
@@ -44,20 +76,26 @@ const createLoanApplication = asyncHandler(async (req, res) => {
     const loanApplication = await prisma.loanApplication.create({
         data: {
             refId,
+            partnerId,
+            courseId,
+            schemeId,
             applicantName,
             applicantPhone,
             applicantEmail,
-            course,
+            applicantGender,
             guardianName,
             guardianPhone,
             guardianEmail,
             relationship,
             fees: fees ? parseFloat(fees) : null,
             monthlyIncome: monthlyIncome ? parseInt(monthlyIncome) : 0,
-            partner,
             bankStatement: bankStatementUrl,
             admissionDoc: admissionDocUrl,
         },
+        include: {
+            partner: true,
+            course: true
+        }
     });
 
     res.respond(
@@ -175,7 +213,10 @@ const approveLoan = asyncHandler(async (req, res) => {
 
     const loanApplication = await prisma.loanApplication.findUnique({
         where: { id },
-        include: { kyc: true },
+        include: {
+            kyc: true,
+            scheme: true
+        },
     });
 
     if (!loanApplication) {
@@ -186,9 +227,22 @@ const approveLoan = asyncHandler(async (req, res) => {
         return res.respond(400, "KYC not completed or not approved");
     }
 
-    const totalInterest = (loanAmount * interestRate * tenure) / (12 * 100);
-    const totalAmount = loanAmount + totalInterest;
-    const emiAmount = totalAmount / tenure;
+    const scheme = loanApplication.scheme;
+    const emiAmount = calculateEMI(
+        parseFloat(loanAmount),
+        parseFloat(interestRate),
+        parseInt(tenure),
+        scheme.interestType,
+        scheme.interestPaidBy
+    );
+
+    const totalInterest = scheme.interestType === "FLAT" && scheme.interestPaidBy === "STUDENT"
+        ? (parseFloat(loanAmount) * parseFloat(interestRate) * parseInt(tenure)) / (12 * 100)
+        : 0;
+
+    const totalAmount = scheme.interestPaidBy === "PARTNER"
+        ? parseFloat(loanAmount)
+        : parseFloat(loanAmount) + totalInterest;
 
     const updatedLoan = await prisma.loanApplication.update({
         where: { id },
@@ -199,13 +253,20 @@ const approveLoan = asyncHandler(async (req, res) => {
             tenure: parseInt(tenure),
             emiAmount: parseFloat(emiAmount.toFixed(2))
         },
+        include: {
+            scheme: true,
+            partner: true,
+            course: true
+        }
     });
 
     res.respond(200, "Loan approved successfully with terms", {
         ...updatedLoan,
         calculatedEMI: emiAmount.toFixed(2),
         totalInterest: totalInterest.toFixed(2),
-        totalAmount: totalAmount.toFixed(2)
+        totalAmount: totalAmount.toFixed(2),
+        interestType: scheme.interestType,
+        interestPaidBy: scheme.interestPaidBy
     });
 });
 
@@ -248,14 +309,31 @@ const getAllLoans = asyncHandler(async (req, res) => {
             applicantName: true,
             applicantPhone: true,
             applicantEmail: true,
-            course: true,
-            applicantEmail: true,
+            applicantGender: true,
             guardianName: true,
             guardianEmail: true,
-            partner: true,
             loanAmount: true,
             interestRate: true,
             tenure: true,
+            status: true,
+            partner: {
+                select: {
+                    id: true,
+                    name: true
+                }
+            },
+            course: {
+                select: {
+                    id: true,
+                    name: true
+                }
+            },
+            scheme: {
+                select: {
+                    id: true,
+                    schemeName: true
+                }
+            },
             kyc: {
                 select: {
                     id: true,
@@ -323,10 +401,28 @@ const getPendingLoans = asyncHandler(async (req, res) => {
             applicantName: true,
             applicantPhone: true,
             applicantEmail: true,
-            course: true,
+            applicantGender: true,
             loanAmount: true,
             interestRate: true,
             tenure: true,
+            partner: {
+                select: {
+                    id: true,
+                    name: true
+                }
+            },
+            course: {
+                select: {
+                    id: true,
+                    name: true
+                }
+            },
+            scheme: {
+                select: {
+                    id: true,
+                    schemeName: true
+                }
+            },
             kyc: {
                 select: {
                     id: true,
@@ -366,6 +462,9 @@ const getPendingLoanDetails = asyncHandler(async (req, res) => {
         },
         include: {
             kyc: true,
+            partner: true,
+            course: true,
+            scheme: true
         },
     });
 
@@ -394,15 +493,15 @@ const getApprovedLoans = asyncHandler(async (req, res) => {
 
     const searchFilter = search
         ? {
-              OR: [
-                  { applicantName: { contains: search, mode: "insensitive" } },
-                  { applicantPhone: { contains: search } },
-                  { applicantEmail: { contains: search, mode: "insensitive" } },
-                  { guardianName: { contains: search, mode: "insensitive" } },
-                  { guardianPhone: { contains: search } },
-                  { refId: { contains: search, mode: "insensitive" } },
-              ],
-          }
+            OR: [
+                { applicantName: { contains: search, mode: "insensitive" } },
+                { applicantPhone: { contains: search } },
+                { applicantEmail: { contains: search, mode: "insensitive" } },
+                { guardianName: { contains: search, mode: "insensitive" } },
+                { guardianPhone: { contains: search } },
+                { refId: { contains: search, mode: "insensitive" } },
+            ],
+        }
         : {};
 
     const total = await prisma.loanApplication.count({
@@ -425,11 +524,26 @@ const getApprovedLoans = asyncHandler(async (req, res) => {
             applicantName: true,
             applicantPhone: true,
             applicantEmail: true,
-            course: true,
             loanAmount: true,
             interestRate: true,
             tenure: true,
             emiAmount: true,
+            status: true,
+            partner: {
+                select: {
+                    name: true
+                }
+            },
+            course: {
+                select: {
+                    name: true
+                }
+            },
+            scheme: {
+                select: {
+                    schemeName: true
+                }
+            }
         },
         orderBy: {
             createdAt: "desc",
@@ -464,6 +578,9 @@ const getApprovedLoanDetails = asyncHandler(async (req, res) => {
         },
         include: {
             kyc: true,
+            partner: true,
+            course: true,
+            scheme: true
         },
     });
 

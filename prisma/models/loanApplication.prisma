@@ -2,15 +2,17 @@
 model LoanApplication {
     id             String     @id @default(uuid())
     refId          String     @unique
+    partnerId       String
+    courseId        String
+    schemeId        String
     applicantName  String
     applicantPhone String
     applicantEmail String
-    course         String
+    applicantGender Gender
     guardianName   String
     guardianPhone  String
     guardianEmail  String
     relationship   String
-    partner        String     @default("VidyaShakti")
     monthlyIncome  Int        @default(0)
     bankStatement  String?
     admissionDoc   String?
@@ -22,6 +24,10 @@ model LoanApplication {
     status         LoanStatus @default(PENDING)
     createdAt      DateTime   @default(now())
     updatedAt      DateTime   @updatedAt
+
+    partner            Partner             @relation(fields: [partnerId], references: [id])
+    course             Course              @relation(fields: [courseId], references: [id])
+    scheme             LoanScheme          @relation(fields: [schemeId], references: [id])
 
     kyc                KYC?
     eNachMandate       ENachMandate?

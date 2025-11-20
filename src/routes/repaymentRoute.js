@@ -1,5 +1,5 @@
 const express = require("express");
-const { addUTRDetails, processRepayment, getRepaymentHistory, getClosedLoans, getClosureCertificate, sendBulkEmiReminderMessagesFromExcel } = require("../controllers/repaymentController");
+const { processRepayment, getRepaymentHistory, getClosedLoans, getClosureCertificate, sendBulkEmiReminderMessagesFromExcel } = require("../controllers/repaymentController");
 const multerErrorHandler = require("../../middleware/multerErrorHandler");
 const createUploadMiddleware = require("../../middleware/upload");
 const { PAYMENT_RECIEPT } = require("../../utils/fileFieldMapper")
