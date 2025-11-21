@@ -54,10 +54,18 @@ const createLoanApplication = asyncHandler(async (req, res) => {
     }
 
     const scheme = await prisma.loanScheme.findUnique({
-        where: { id: schemeId }
+        where: { id: schemeId },
+        include: {
+            partner: true,
+            course: true
+        }
     });
-    if (!scheme || scheme.partnerId !== partnerId || scheme.courseId !== courseId) {
-        return res.respond(404, "Scheme not found or does not belong to selected partner and course");
+    if (!scheme || scheme.partnerId !== partnerId) {
+        return res.respond(404, "Scheme not found or does not belong to selected partner");
+    }
+
+    if (scheme.courseId && scheme.courseId !== courseId) {
+        return res.respond(400, "This scheme is only applicable for a different course");
     }
 
     const refId = `L2G${Date.now()}${Math.floor(Math.random() * 1000)}`;
@@ -94,7 +102,8 @@ const createLoanApplication = asyncHandler(async (req, res) => {
         },
         include: {
             partner: true,
-            course: true
+            course: true,
+            scheme: true
         }
     });
 

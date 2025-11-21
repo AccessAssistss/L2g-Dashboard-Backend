@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 // ##########----------Create Course----------##########
 const createCourse = asyncHandler(async (req, res) => {
     const userId = req.user;
-    const { partnerId, name, code } = req.body;
+    const { partnerId, name } = req.body;
 
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
@@ -16,10 +16,9 @@ const createCourse = asyncHandler(async (req, res) => {
         return res.respond(403, "Only admins can create courses");
     }
 
-    if (!partnerId || !name || !code) {
-        return res.respond(400, "Partner ID, name and code are required");
+     if (!partnerId || !name) {
+        return res.respond(400, "Partner ID and course name are required");
     }
-
     const partner = await prisma.partner.findUnique({
         where: { id: partnerId }
     });
@@ -37,6 +36,31 @@ const createCourse = asyncHandler(async (req, res) => {
 
     if (existingCourse) {
         return res.respond(400, "Course with this name already exists for this partner");
+    }
+
+    const baseCode = name
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .substring(0, 8);
+    
+    let code = baseCode;
+    let counter = 1;
+    let codeExists = await prisma.course.findFirst({ 
+        where: { 
+            partnerId,
+            code 
+        } 
+    });
+    
+    while (codeExists) {
+        code = `${baseCode}${counter}`;
+        codeExists = await prisma.course.findFirst({ 
+            where: { 
+                partnerId,
+                code 
+            } 
+        });
+        counter++;
     }
 
     const course = await prisma.course.create({
@@ -82,7 +106,7 @@ const getAllCourses = asyncHandler(async (req, res) => {
 const updateCourse = asyncHandler(async (req, res) => {
     const userId = req.user;
     const { id } = req.params;
-    const { name, code, isActive } = req.body;
+    const { name, isActive } = req.body;
 
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
@@ -100,13 +124,58 @@ const updateCourse = asyncHandler(async (req, res) => {
         return res.respond(404, "Course not found");
     }
 
+    const updateData = {
+        isActive: isActive !== undefined ? isActive : course.isActive
+    };
+
+    if (name && name !== course.name) {
+        const existingCourse = await prisma.course.findFirst({
+            where: {
+                partnerId: course.partnerId,
+                name,
+                id: { not: id }
+            }
+        });
+
+        if (existingCourse) {
+            return res.respond(400, "Course with this name already exists for this partner");
+        }
+
+        updateData.name = name;
+
+        const baseCode = name
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, '')
+            .substring(0, 8);
+        
+        let code = baseCode;
+        let counter = 1;
+        let codeExists = await prisma.course.findFirst({ 
+            where: { 
+                partnerId: course.partnerId,
+                code,
+                id: { not: id }
+            } 
+        });
+        
+        while (codeExists) {
+            code = `${baseCode}${counter}`;
+            codeExists = await prisma.course.findFirst({ 
+                where: { 
+                    partnerId: course.partnerId,
+                    code,
+                    id: { not: id }
+                } 
+            });
+            counter++;
+        }
+
+        updateData.code = code;
+    }
+
     const updatedCourse = await prisma.course.update({
         where: { id },
-        data: {
-            name: name || course.name,
-            code: code || course.code,
-            isActive: isActive !== undefined ? isActive : course.isActive
-        },
+        data: updateData,
         include: {
             partner: true
         }

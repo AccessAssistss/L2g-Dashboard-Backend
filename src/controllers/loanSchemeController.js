@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 const createLoanScheme = asyncHandler(async (req, res) => {
     const userId = req.user;
-    const { partnerId, courseId, schemeName, interestType, interestPaidBy } = req.body;
+    const { partnerId, courseId, schemeName, interestType, interestPaidBy, academicYearStartDate, academicYearEndDate } = req.body;
 
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
@@ -15,7 +15,7 @@ const createLoanScheme = asyncHandler(async (req, res) => {
         return res.respond(403, "Only admins can create loan schemes");
     }
 
-    if (!partnerId || !courseId || !schemeName || !interestType || !interestPaidBy) {
+    if (!partnerId || !courseId || !schemeName || !interestType || !interestPaidBy || !academicYearStartDate || !academicYearEndDate) {
         return res.respond(400, "All fields are required: partnerId, courseId, schemeName, interestType, interestPaidBy");
     }
 
@@ -35,16 +35,18 @@ const createLoanScheme = asyncHandler(async (req, res) => {
         return res.respond(404, "Partner not found");
     }
 
-    const course = await prisma.course.findUnique({
-        where: { id: courseId }
-    });
+    if (courseId) {
+        const course = await prisma.course.findUnique({
+            where: { id: courseId }
+        });
 
-    if (!course) {
-        return res.respond(404, "Course not found");
-    }
+        if (!course) {
+            return res.respond(404, "Course not found");
+        }
 
-    if (course.partnerId !== partnerId) {
-        return res.respond(400, "Course does not belong to the specified partner");
+        if (course.partnerId !== partnerId) {
+            return res.respond(400, "Course does not belong to the specified partner");
+        }
     }
 
     const existingScheme = await prisma.loanScheme.findUnique({
@@ -55,13 +57,28 @@ const createLoanScheme = asyncHandler(async (req, res) => {
         return res.respond(400, "Scheme with this name already exists");
     }
 
+    const startDate = new Date(academicYearStartDate);
+    const endDate = new Date(academicYearEndDate);
+
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        return res.respond(400, "Invalid date format for academic year dates");
+    }
+
+    if (endDate <= startDate) {
+        return res.respond(400, "Academic year end date must be after start date");
+    }
+
+    const schemeType = courseId ? "COURSE_SPECIFIC" : "PARTNER_LEVEL";
+
     const scheme = await prisma.loanScheme.create({
         data: {
             partnerId,
-            courseId,
+            courseId: courseId || null,
             schemeName,
             interestType,
-            interestPaidBy
+            interestPaidBy,
+            academicYearStartDate: startDate,
+            academicYearEndDate: endDate
         },
         include: {
             partner: true,
@@ -69,7 +86,10 @@ const createLoanScheme = asyncHandler(async (req, res) => {
         }
     });
 
-    res.respond(201, "Loan scheme created successfully", scheme);
+    res.respond(201, `${schemeType} loan scheme created successfully`, {
+        ...scheme,
+        schemeType
+    });
 });
 
 // ##########----------Get All Loan Schemes----------##########
@@ -183,7 +203,7 @@ const deleteLoanScheme = asyncHandler(async (req, res) => {
 // ##########----------Get Schemes By Partner and Course (For Agents)----------##########
 const getSchemesByPartnerAndCourse = asyncHandler(async (req, res) => {
     const userId = req.user;
-    const { partnerId, courseId } = req.params;
+    const { partnerId, courseId } = req.query;
 
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
@@ -205,7 +225,7 @@ const getSchemesByPartnerAndCourse = asyncHandler(async (req, res) => {
         orderBy: { schemeName: "asc" }
     });
 
-    res.respond(200, "Schemes fetched successfully", schemes);
+    res.respond(200, "Loan Schemes fetched successfully", schemes);
 });
 
 module.exports = {
