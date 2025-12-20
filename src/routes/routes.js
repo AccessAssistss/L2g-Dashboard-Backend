@@ -12,5 +12,6 @@ router.use("/analytics", require("./analyticsRoute"));
 router.use("/partner", require("./partnerRoute"));
 router.use("/course", require("./courseRoute"));
 router.use("/loanScheme", require("./loanSchemeRoute"));
+router.use("/files", require("./fileRoute"));
 
 module.exports = router;

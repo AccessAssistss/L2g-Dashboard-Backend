@@ -32,18 +32,6 @@ const disburseLoan = asyncHandler(async (req, res) => {
         return res.respond(404, "Loan application not found");
     }
 
-    // if (loanApplication.status !== "ENACH_ACTIVE") {
-    //     return res.respond(400, "e-NACH must be activated before disbursement. Current status: " + loanApplication.status);
-    // }
-
-    // if (!loanApplication.eNachMandate) {
-    //     return res.respond(400, "e-NACH mandate not found");
-    // }
-
-    // if (loanApplication.eNachMandate.status !== "ACTIVE") {
-    //     return res.respond(400, "e-NACH mandate is not active. Status: " + loanApplication.eNachMandate.status);
-    // }
-
     const existingDisbursement = await prisma.disbursement.findUnique({
         where: { loanApplicationId }
     });
@@ -243,11 +231,17 @@ const getDisbursedLoans = asyncHandler(async (req, res) => {
         },
     });
 
+    const loansWithStatus = disbursedLoans.map(loan => ({
+        ...loan,
+        disbursementMode: loan.eNachMandate?.status === "ACTIVE" ? "WITH_ENACH" : "MANUAL_REPAYMENT",
+        hasENach: loan.eNachMandate?.status === "ACTIVE" || false
+    }));
+
     res.respond(200, "Disbursed loans fetched successfully", {
         total,
         page: Number(page),
         limit: Number(limit),
-        data: disbursedLoans
+        data: loansWithStatus
     });
 });
 

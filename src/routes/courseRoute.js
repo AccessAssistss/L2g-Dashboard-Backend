@@ -11,7 +11,6 @@ const {
 
 router.post("/createCourse", validateToken, createCourse);
 router.get("/getAllCourses", validateToken, getAllCourses);
-router.get("/getAllCourses", validateToken, getAllCourses);
 router.put("/updateCourse/:id", validateToken, updateCourse);
 router.delete("/deleteCourse/:id", validateToken, deleteCourse);
 router.get("/getCoursesByPartnerForAgents/:partnerId", validateToken, getCoursesByPartnerForAgents);

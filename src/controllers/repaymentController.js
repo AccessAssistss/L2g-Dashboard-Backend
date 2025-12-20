@@ -1,6 +1,6 @@
 const { PrismaClient } = require("@prisma/client");
 const { asyncHandler } = require("../../utils/asyncHandler");
-const { sendEmiReminderMessage } = require("../../utils/messageSender");
+const { sendEmiReminderMessage, sendEmiBounceMessage } = require("../../utils/messageSender");
 const xlsx = require("xlsx");
 const fs = require("fs");
 const path = require("path");
@@ -62,9 +62,7 @@ const processRepayment = asyncHandler(async (req, res) => {
     }
 
     const paymentRecieptFile = req.files?.paymentReciept?.[0];
-    const paymentRecieptUrl = paymentRecieptFile
-        ? `/uploads/loan/payment/reciept/${paymentRecieptFile.filename}`
-        : null;
+    const paymentReceiptUrl = paymentReceiptFile?.path || null;
 
     const scheme = loanAccount.loanApplication.scheme;
     const loanApp = loanAccount.loanApplication;
@@ -383,10 +381,101 @@ const sendBulkEmiReminderMessagesFromExcel = asyncHandler(async (req, res) => {
     res.respond(200, "Bulk EMI reminder messages sent.", results);
 });
 
+const sendBulkEmiBounceMessagesFromExcel = asyncHandler(async (req, res) => {
+    if (!req.file) {
+        return res.respond(400, "No file uploaded!");
+    }
+
+    const filePath = req.file.path;
+
+    let workbook;
+    try {
+        workbook = xlsx.readFile(filePath);
+    } catch (err) {
+        return res.respond(400, "Failed to parse Excel file.");
+    }
+
+    const sheetName = workbook.SheetNames[0];
+    const sheetData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+    const results = [];
+
+    for (const row of sheetData) {
+        const name = row['Applicant Name'] || row.name || row.Name || "Customer";
+        const mobile = String(row['Mobile Number'] || row.mobile || row.phone || row.Phone || '').trim();
+        const guardianMobile = String(row['Guardian Phone'] || row['Guardian Number'] || row.guardian_mobile || row.gmobile || '').trim();
+        const emiAmount = row['Emi Amount'] || row.emi || row.EMI_Amount || row.amount;
+        const loanAccountNo = row['Loan No'] || row.loan || row.Loan_Account_No || row.account;
+
+        const emiDateRaw = row['Due Date'] || row.Date || row.date || row.dueDate || "N/A";
+
+        let dueDate = "N/A";
+
+        if (emiDateRaw) {
+            let parsedDate;
+
+            if (typeof emiDateRaw === "number") {
+                parsedDate = moment(new Date((emiDateRaw - 25569) * 86400 * 1000));
+            } else if (emiDateRaw instanceof Date) {
+                parsedDate = moment(emiDateRaw);
+            } else {
+                parsedDate = moment(emiDateRaw, ["DD-MM-YYYY", "DD/MM/YYYY", "YYYY-MM-DD", "Do MMM YYYY"], true);
+            }
+
+            if (parsedDate.isValid()) {
+                dueDate = parsedDate.format("DD-MM-YYYY");
+            }
+        }
+
+        const cleanEmiAmount = typeof emiAmount === 'string' ? emiAmount.replace(/,/g, '') : emiAmount;
+
+        if (!mobile && !guardianMobile) {
+            results.push({ status: "skipped", reason: "Missing mobile and guardian mobile", row });
+            continue;
+        }
+
+        const status = { sms_sent: null, guardian_sms_sent: null };
+
+        if (mobile) {
+            try {
+                const smsSent = await sendEmiBounceMessage(mobile, name, cleanEmiAmount, loanAccountNo);
+                status.sms_sent = smsSent ? "sent" : "failed";
+            } catch (err) {
+                status.sms_sent = `failed: ${err.message}`;
+            }
+        }
+
+        if (guardianMobile && guardianMobile !== mobile) {
+            try {
+                const guardianSmsSent = await sendEmiBounceMessage(guardianMobile, name, cleanEmiAmount, loanAccountNo);
+                status.guardian_sms_sent = guardianSmsSent ? "sent" : "failed";
+            } catch (err) {
+                status.guardian_sms_sent = `failed: ${err.message}`;
+            }
+        }
+
+        results.push({
+            name,
+            mobile,
+            guardianMobile,
+            emiAmount: cleanEmiAmount,
+            loanAccountNo,
+            dueDate,
+            ...status
+        });
+    }
+
+    fs.unlink(filePath, () => { });
+
+    res.respond(200, "Bulk EMI bounce messages sent.", results);
+});
+
+
 module.exports = {
     processRepayment,
     getRepaymentHistory,
     getClosedLoans,
     getClosureCertificate,
-    sendBulkEmiReminderMessagesFromExcel
+    sendBulkEmiReminderMessagesFromExcel,
+    sendBulkEmiBounceMessagesFromExcel
 };

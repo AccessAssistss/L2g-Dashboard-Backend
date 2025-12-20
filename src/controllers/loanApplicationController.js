@@ -21,7 +21,7 @@ const createLoanApplication = asyncHandler(async (req, res) => {
         guardianEmail,
         relationship,
         fees,
-        monthlyIncome,
+        monthlyIncome,  
     } = req.body;
 
     const user = await prisma.customUser.findUnique({
@@ -73,13 +73,8 @@ const createLoanApplication = asyncHandler(async (req, res) => {
     const bankStatementFile = req.files?.bankStatement?.[0];
     const admissionDocFile = req.files?.admissionDoc?.[0];
 
-    const bankStatementUrl = bankStatementFile
-        ? `/uploads/other/student/bank_statement/${bankStatementFile.filename}`
-        : null;
-
-    const admissionDocUrl = admissionDocFile
-        ? `/uploads/other/student/admission_doc/${admissionDocFile.filename}`
-        : null;
+    const bankStatementUrl = bankStatementFile?.path || null;
+    const admissionDocUrl = admissionDocFile?.path || null;
 
     const loanApplication = await prisma.loanApplication.create({
         data: {
@@ -136,30 +131,12 @@ const submitKYC = asyncHandler(async (req, res) => {
     const guardianAadharBackFile = req.files?.guardianAadharBack?.[0];
     const guardianPanCardFile = req.files?.guardianPanCard?.[0];
 
-    const studentAadharFrontUrl = studentAadharFrontFile
-        ? `/uploads/kyc/student/aadhar_front/${studentAadharFrontFile.filename}`
-        : null;
-
-    const studentAadharBackUrl = studentAadharBackFile
-        ? `/uploads/kyc/student/aadhar_back/${studentAadharBackFile.filename}`
-        : null;
-
-    const studentPanCardUrl = studentPanCardFile
-        ? `/uploads/kyc/student/pan/${studentPanCardFile.filename}`
-        : null;
-
-    const guardianAadharFrontUrl = guardianAadharFrontFile
-        ? `/uploads/kyc/guardian/aadhar_front/${guardianAadharFrontFile.filename}`
-        : null;
-
-    const guardianAadharBackUrl = guardianAadharBackFile
-        ? `/uploads/kyc/guardian/aadhar_back/${guardianAadharBackFile.filename}`
-        : null;
-
-    const guardianPanCardUrl = guardianPanCardFile
-        ? `/uploads/kyc/guardian/pan/${guardianPanCardFile.filename}`
-        : null;
-
+    const studentAadharFrontUrl = studentAadharFrontFile?.path || null;
+    const studentAadharBackUrl = studentAadharBackFile?.path || null;
+    const studentPanCardUrl = studentPanCardFile?.path || null;
+    const guardianAadharFrontUrl = guardianAadharFrontFile?.path || null;
+    const guardianAadharBackUrl = guardianAadharBackFile?.path || null;
+    const guardianPanCardUrl = guardianPanCardFile?.path || null;
 
     const loanApplication = await prisma.loanApplication.findUnique({
         where: { id: loanApplicationId },

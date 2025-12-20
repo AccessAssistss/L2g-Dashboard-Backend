@@ -60,12 +60,33 @@ const createPartner = asyncHandler(async (req, res) => {
 
 // ##########----------Get All Partners----------##########
 const getAllPartners = asyncHandler(async (req, res) => {
-    const { isActive } = req.query;
+    const { page = 1, limit = 10, search = "", isActive } = req.query;
 
-    const filter = isActive !== undefined ? { isActive: isActive === "true" } : {};
+    const skip = (page - 1) * limit;
+
+    const searchFilter = search
+        ? {
+            OR: [
+                { name: { contains: search, mode: "insensitive" } },
+                { code: { contains: search, mode: "insensitive" } },
+                { address: { contains: search, mode: "insensitive" } }
+            ]
+        }
+        : {};
+
+    const filter = {
+        ...searchFilter,
+        ...(isActive !== undefined ? { isActive: isActive === "true" } : {})
+    };
+
+    const total = await prisma.partner.count({
+        where: filter
+    });
 
     const partners = await prisma.partner.findMany({
         where: filter,
+        skip: Number(skip),
+        take: Number(limit),
         include: {
             _count: {
                 select: {
@@ -78,7 +99,12 @@ const getAllPartners = asyncHandler(async (req, res) => {
         orderBy: { createdAt: "desc" }
     });
 
-    res.respond(200, "Partners fetched successfully", partners);
+    res.respond(200, "Partners fetched successfully", {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        data: partners
+    });
 });
 
 // ##########----------Update Partner----------##########

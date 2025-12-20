@@ -94,15 +94,42 @@ const createLoanScheme = asyncHandler(async (req, res) => {
 
 // ##########----------Get All Loan Schemes----------##########
 const getAllLoanSchemes = asyncHandler(async (req, res) => {
-    const { partnerId, courseId, isActive } = req.query;
+    const { page = 1, limit = 10, search = "", partnerId, courseId, isActive, schemeType } = req.query;
 
-    const filter = {};
-    if (partnerId) filter.partnerId = partnerId;
-    if (courseId) filter.courseId = courseId;
-    if (isActive !== undefined) filter.isActive = isActive === "true";
+    const skip = (page - 1) * limit;
+
+    const searchFilter = search
+        ? {
+            OR: [
+                { schemeName: { contains: search, mode: "insensitive" } }
+            ]
+        }
+        : {};
+
+    const filter = {
+        ...searchFilter,
+        ...(partnerId ? { partnerId } : {}),
+        ...(isActive !== undefined ? { isActive: isActive === "true" } : {})
+    };
+
+    if (schemeType === "PARTNER_LEVEL") {
+        filter.courseId = null;
+    } else if (schemeType === "COURSE_SPECIFIC") {
+        filter.courseId = { not: null };
+    }
+
+    if (courseId) {
+        filter.courseId = courseId;
+    }
+
+    const total = await prisma.loanScheme.count({
+        where: filter
+    });
 
     const schemes = await prisma.loanScheme.findMany({
         where: filter,
+        skip: Number(skip),
+        take: Number(limit),
         include: {
             partner: true,
             course: true,
@@ -113,7 +140,17 @@ const getAllLoanSchemes = asyncHandler(async (req, res) => {
         orderBy: { createdAt: "desc" }
     });
 
-    res.respond(200, "Loan schemes fetched successfully", schemes);
+    const schemesWithType = schemes.map(scheme => ({
+        ...scheme,
+        schemeType: scheme.courseId ? "COURSE_SPECIFIC" : "PARTNER_LEVEL"
+    }));
+
+    res.respond(200, "Loan schemes fetched successfully", {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        data: schemesWithType
+    });
 });
 
 // ##########----------Update Loan Scheme----------##########

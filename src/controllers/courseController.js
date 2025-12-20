@@ -79,14 +79,33 @@ const createCourse = asyncHandler(async (req, res) => {
 
 // ##########----------Get All Courses----------##########
 const getAllCourses = asyncHandler(async (req, res) => {
-    const { partnerId, isActive } = req.query;
+    const { page = 1, limit = 10, search = "", partnerId, isActive } = req.query;
 
-    const filter = {};
-    if (partnerId) filter.partnerId = partnerId;
-    if (isActive !== undefined) filter.isActive = isActive === "true";
+    const skip = (page - 1) * limit;
+
+    const searchFilter = search
+        ? {
+            OR: [
+                { name: { contains: search, mode: "insensitive" } },
+                { code: { contains: search, mode: "insensitive" } }
+            ]
+        }
+        : {};
+
+    const filter = {
+        ...searchFilter,
+        ...(partnerId ? { partnerId } : {}),
+        ...(isActive !== undefined ? { isActive: isActive === "true" } : {})
+    };
+
+    const total = await prisma.course.count({
+        where: filter
+    });
 
     const courses = await prisma.course.findMany({
         where: filter,
+        skip: Number(skip),
+        take: Number(limit),
         include: {
             partner: true,
             _count: {
@@ -99,7 +118,12 @@ const getAllCourses = asyncHandler(async (req, res) => {
         orderBy: { createdAt: "desc" }
     });
 
-    res.respond(200, "Courses fetched successfully", courses);
+    res.respond(200, "Courses fetched successfully", {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        data: courses
+    });
 });
 
 // ##########----------Update Course----------##########
