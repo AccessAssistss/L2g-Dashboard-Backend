@@ -66,10 +66,10 @@ const bulkImportLoans = asyncHandler(async (req, res) => {
 
     for (let i = 0; i < data.length; i++) {
         const row = data[i];
-        
+
         try {
-            const refId = row['Loan Number'] || `L2G${Date.now()}${Math.floor(Math.random() * 1000)}`;
-            
+            const refId = row['Loan Number'];
+
             const existingLoan = await prisma.loanApplication.findFirst({
                 where: { refId }
             });
@@ -84,9 +84,13 @@ const bulkImportLoans = asyncHandler(async (req, res) => {
                 continue;
             }
 
-            const fees = parseFloat(row['Fees']) || 0;
+            const tuitionFees = parseFloat(row['Tuition Fees']) || 0;
+            const otherCharges = parseFloat(row['Other Charges']) || 0;
+            const totalFees = parseFloat(row['Total Fees']) || 0;
             const monthlyIncome = parseInt(row['Monthly Income']) || 0;
-            const loanAmount = parseFloat(row['Loan Amount']) || fees;
+            const loanAmount = parseFloat(row['Loan Amount']) || 0;
+            const loanAmountRequested = parseFloat(row['Loan Amount Requested']) || 0;
+            const disbursedAmount = parseFloat(row['Disbursed Amount']) || 0;
             const interestRate = parseFloat(row['Interest']) || 0;
             const tenure = parseInt(row['Tenure']) || 12;
 
@@ -100,120 +104,164 @@ const bulkImportLoans = asyncHandler(async (req, res) => {
             };
             const applicantGender = genderMap[row['Applicant Gender']] || 'OTHER';
 
-            const loanApplication = await prisma.loanApplication.create({
-                data: {
-                    refId,
-                    partnerId,
-                    courseId,
-                    schemeId,
-                    applicantName: row['Applicant Name'] || '',
-                    applicantPhone: String(row['Applicant Phone'] || ''),
-                    applicantEmail: row['Applicant Email'] || '',
-                    applicantGender,
-                    guardianName: row['Guardian Name'] || '',
-                    guardianPhone: String(row['Guardian Phone'] || ''),
-                    guardianEmail: row['Guardian Email'] || '',
-                    relationship: row['Relationship'] || 'Father',
-                    fees,
-                    monthlyIncome,
+            let semesterFunding = [];
+
+            if (row['Semester Funding']) {
+                try {
+                    semesterFunding = JSON.parse(row['Semester Funding']);
+
+                    if (!Array.isArray(semesterFunding) || semesterFunding.length === 0) {
+                        throw new Error("Semester Funding must be a non-empty array");
+                    }
+
+                    semesterFunding.forEach(sem => {
+                        if (!sem.semester || !sem.fees || Number(sem.fees) <= 0) {
+                            throw new Error("Invalid semester funding structure");
+                        }
+                    });
+
+                } catch (err) {
+                    console.log(err)
+                    results.failed.push({
+                        row: i + 2,
+                        refId,
+                        applicantName: row['Applicant Name'],
+                        reason: "Invalid Semester Funding JSON"
+                    });
+                    continue;
+                }
+            }
+
+            const result = await prisma.$transaction(async (tx) => {
+                const loanApplication = await tx.loanApplication.create({
+                    data: {
+                        refId,
+                        partnerId,
+                        courseId,
+                        schemeId,
+                        applicantName: row['Applicant Name'] || '',
+                        applicantPhone: String(row['Applicant Phone'] || ''),
+                        alternativeApplicantPhone: String(row['Alternative Applicant Phone'] || ''),
+                        applicantEmail: row['Applicant Email'] || '',
+                        applicantGender,
+                        guardianName: row['Guardian Name'] || '',
+                        guardianPhone: String(row['Guardian Phone'] || ''),
+                        alternativeGuardianPhone: String(row['Alternative Guardian Phone'] || ''),
+                        guardianEmail: row['Guardian Email'] || '',
+                        relationship: row['Relationship'] || 'Father',
+                        tuitionFees,
+                        otherCharges,
+                        totalFees,
+                        monthlyIncome,
+                        loanAmount,
+                        loanAmountRequested,
+                        interestRate,
+                        tenure,
+                        status: "PENDING"
+                    }
+                });
+
+                if (semesterFunding.length > 0) {
+                    await tx.loanSemesterFunding.createMany({
+                        data: semesterFunding.map(sem => ({
+                            loanApplicationId: loanApplication.id,
+                            semester: sem.semester,
+                            fees: Number(sem.fees)
+                        }))
+                    });
+                }
+
+                await tx.kYC.create({
+                    data: {
+                        loanApplicationId: loanApplication.id,
+                        studentAadharFront: row['Student Aadhar Front'] || null,
+                        studentAadharBack: row['Student Aadhar Back'] || null,
+                        studentPanCard: row['Student Pan'] || null,
+                        guardianAadharFront: row['Guardian Aadhar Front'] || null,
+                        guardianAadharBack: row['Guardian Aadhar Back'] || null,
+                        guardianPanCard: row['Guardian Pan'] || null,
+                        videoKycLink: null,
+                        isVKYCApproved: true,
+                        approvedAt: new Date()
+                    }
+                });
+
+                const emiAmount = calculateEMI(
                     loanAmount,
                     interestRate,
                     tenure,
-                    status: "PENDING"
+                    scheme.interestType,
+                    scheme.interestPaidBy
+                );
+
+                await tx.loanApplication.update({
+                    where: { id: loanApplication.id },
+                    data: {
+                        status: "APPROVED",
+                        emiAmount: parseFloat(emiAmount.toFixed(2))
+                    }
+                });
+
+                const advanceEMIPaid = false;
+                const advanceEMIAmount = 0;
+
+                let totalInterest = 0;
+                let totalOutstanding = 0;
+                let remainingPrincipal = loanAmount;
+                let remainingInterest = 0;
+
+                if (scheme.interestPaidBy === "PARTNER") {
+                    totalInterest = 0;
+                    totalOutstanding = loanAmount;
+                } else if (scheme.interestType === "FLAT") {
+                    totalInterest = (loanAmount * interestRate * tenure) / (12 * 100);
+                    totalOutstanding = loanAmount + totalInterest;
+                    remainingInterest = totalInterest;
+                } else {
+                    totalInterest = 0;
+                    totalOutstanding = loanAmount;
                 }
-            });
 
-            await prisma.kYC.create({
-                data: {
-                    loanApplicationId: loanApplication.id,
-                    studentAadharFront: row['Student Aadhar Front'] || null,
-                    studentAadharBack: row['Student Aadhar Back'] || null,
-                    studentPanCard: row['Student Pan'] || null,
-                    guardianAadharFront: row['Guardian Aadhar Front'] || null,
-                    guardianAadharBack: row['Guardian Aadhar Back'] || null,
-                    guardianPanCard: row['Guardian Pan'] || null,
-                    videoKycLink: null,
-                    isVKYCApproved: true,
-                    approvedAt: new Date()
-                }
-            });
+                await tx.disbursement.create({
+                    data: {
+                        loanApplicationId: loanApplication.id,
+                        disbursedAmount,
+                        interestRate,
+                        tenure,
+                        advanceEMIPaid,
+                        advanceEMIAmount: 0,
+                        interestPaidBy: scheme.interestPaidBy
+                    }
+                });
 
-            const emiAmount = calculateEMI(
-                loanAmount,
-                interestRate,
-                tenure,
-                scheme.interestType,
-                scheme.interestPaidBy
-            );
+                const loanAccount = await tx.loanAccount.create({
+                    data: {
+                        loanApplicationId: loanApplication.id,
+                        principalAmount: Math.max(0, remainingPrincipal),
+                        interestAmount: Math.max(0, remainingInterest),
+                        totalOutstanding: Math.max(0, totalOutstanding),
+                        totalPaid: 0
+                    }
+                });
 
-            await prisma.loanApplication.update({
-                where: { id: loanApplication.id },
-                data: {
-                    status: "APPROVED",
-                    emiAmount: parseFloat(emiAmount.toFixed(2))
-                }
-            });
-
-            const advanceEMIPaid = false;
-            const advanceEMIAmount = 0;
-
-            let totalInterest = 0;
-            let totalOutstanding = 0;
-            let remainingPrincipal = loanAmount;
-            let remainingInterest = 0;
-
-            if (scheme.interestPaidBy === "PARTNER") {
-                totalInterest = 0;
-                totalOutstanding = loanAmount;
-            } else if (scheme.interestType === "FLAT") {
-                totalInterest = (loanAmount * interestRate * tenure) / (12 * 100);
-                totalOutstanding = loanAmount + totalInterest;
-                remainingInterest = totalInterest;
-            } else {
-                totalInterest = 0;
-                totalOutstanding = loanAmount;
-            }
-
-            await prisma.disbursement.create({
-                data: {
-                    loanApplicationId: loanApplication.id,
-                    disbursedAmount: loanAmount,
-                    interestRate,
-                    tenure,
-                    advanceEMIPaid,
-                    advanceEMIAmount: 0,
-                    interestPaidBy: scheme.interestPaidBy
-                }
-            });
-
-            const loanAccountNo = `LA${Date.now()}${i}`;
-            const loanAccount = await prisma.loanAccount.create({
-                data: {
-                    loanApplicationId: loanApplication.id,
-                    loanAccountNo,
-                    principalAmount: Math.max(0, remainingPrincipal),
-                    interestAmount: Math.max(0, remainingInterest),
-                    totalOutstanding: Math.max(0, totalOutstanding),
-                    totalPaid: 0
-                }
-            });
-
-            await prisma.loanApplication.update({
-                where: { id: loanApplication.id },
-                data: { status: "DISBURSED" }
+                await tx.loanApplication.update({
+                    where: { id: loanApplication.id },
+                    data: { status: "DISBURSED" }
+                });
+                return loanApplication;
             });
 
             results.successful.push({
                 row: i + 2,
                 refId,
-                loanApplicationId: loanApplication.id,
-                loanAccountNo,
-                applicantName: loanApplication.applicantName,
+                loanApplicationId: result.id,
+                applicantName: result.applicantName,
                 loanAmount,
                 tenure
             });
 
         } catch (error) {
+            console.log(error)
             results.failed.push({
                 row: i + 2,
                 refId: row['Loan Number'],

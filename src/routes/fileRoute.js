@@ -1,4 +1,3 @@
-// src/routes/fileRoute.js
 const express = require("express");
 const router = express.Router();
 const validateToken = require("../../middleware/validateJwtToken");
@@ -8,9 +7,9 @@ const {
   deleteFile,
 } = require("../controllers/fileController");
 
-router.get("/presigned-url", validateToken, getPresignedUrl);
+router.get("/presignedUrl", validateToken, getPresignedUrl);
 
-router.post("/presigned-urls", validateToken, getPresignedUrls);
+router.post("/presignedUrls", validateToken, getPresignedUrls);
 
 router.delete("/delete", validateToken, deleteFile);
 

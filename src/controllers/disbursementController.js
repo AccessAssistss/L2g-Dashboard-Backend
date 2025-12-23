@@ -11,6 +11,7 @@ const disburseLoan = asyncHandler(async (req, res) => {
     const {
         advanceEMIPaid = true,
         advanceEMIAmount = 0,
+        disbursedAmount = 0,
     } = req.body;
 
     const user = await prisma.customUser.findUnique({
@@ -49,7 +50,7 @@ const disburseLoan = asyncHandler(async (req, res) => {
         const disbursement = await tx.disbursement.create({
             data: {
                 loanApplicationId,
-                disbursedAmount: loanAmount,
+                disbursedAmount,
                 interestRate,
                 tenure,
                 advanceEMIPaid,
@@ -97,12 +98,9 @@ const disburseLoan = asyncHandler(async (req, res) => {
             }
         }
 
-        const loanAccountNo = `LA${Date.now()}`;
-
         const loanAccount = await tx.loanAccount.create({
             data: {
                 loanApplicationId,
-                loanAccountNo,
                 principalAmount: Math.max(0, remainingPrincipal),
                 interestAmount: Math.max(0, remainingInterest),
                 totalOutstanding: Math.max(0, totalOutstanding),
@@ -212,7 +210,6 @@ const getDisbursedLoans = asyncHandler(async (req, res) => {
             loanAccount: {
                 select: {
                     id: true,
-                    loanAccountNo: true,
                     totalOutstanding: true,
                     totalPaid: true
                 },
@@ -267,6 +264,7 @@ const getDisbursedLoanDetails = asyncHandler(async (req, res) => {
             partner: true,
             course: true,
             scheme: true,
+            LoanSemesterFunding: true,
             disbursement: true,
             loanAccount: {
                 include: {

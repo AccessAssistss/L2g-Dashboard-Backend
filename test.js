@@ -5,7 +5,6 @@ const testWebhook = () => {
     // Your webhook secret from .env
     const WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || 'your_webhook_secret_here';
     
-    // Test payload
     const payload = {
         "event": "token.confirmed",
         "payload": {
@@ -30,7 +29,6 @@ const testWebhook = () => {
     
     const body = JSON.stringify(payload);
     
-    // Generate signature
     const signature = crypto
         .createHmac('sha256', WEBHOOK_SECRET)
         .update(body)
@@ -48,8 +46,6 @@ const testWebhook = () => {
     console.log('\n====================\n');
 };
 
-// Run test
 testWebhook();
 
-// Also export for use in other files
 module.exports = { testWebhook };

@@ -60,7 +60,7 @@ const scheduleEMIPayments = cron.schedule("0 9 * * *", async () => {
                     token: {
                         id: mandate.tokenId
                     },
-                    description: `EMI Payment #${emi.emiNumber} for Loan ${mandate.loanApplication.loanAccount?.loanAccountNo}`,
+                    description: `EMI Payment #${emi.emiNumber} for Loan ${mandate.loanApplication.refId}`,
                     notes: {
                         loan_application_id: mandate.loanApplicationId,
                         loan_account_id: mandate.loanApplication.loanAccount?.id,

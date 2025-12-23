@@ -5,7 +5,8 @@ const {
     resendENachLink,
     getLoansForENachActivation,
     getPendingENachLoans,
-    getENachActiveLoans
+    getENachActiveLoans,
+    testICICIENach
 } = require("../controllers/eNachController");
 const validateToken = require("../../middleware/validateJwtToken");
 
@@ -17,5 +18,6 @@ router.post("/resendENachLink/:loanApplicationId", validateToken, resendENachLin
 router.get("/getLoansForENachActivation", validateToken, getLoansForENachActivation);
 router.get("/getPendingENachLoans", validateToken, getPendingENachLoans);
 router.get("/getENachActiveLoans", validateToken, getENachActiveLoans);
+router.post("/testICICIENach", testICICIENach);
 
 module.exports = router;

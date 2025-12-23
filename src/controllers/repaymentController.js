@@ -252,7 +252,6 @@ const getClosedLoans = asyncHandler(async (req, res) => {
             loanAccount: {
                 select: {
                     id: true,
-                    loanAccountNo: true,
                 },
             },
         },

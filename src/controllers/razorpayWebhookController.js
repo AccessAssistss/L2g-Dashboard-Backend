@@ -332,7 +332,7 @@ const handlePaymentCaptured = async (payload) => {
             }
 
             if (newTotalOutstanding <= 0) {
-                console.log(`[PAYMENT_CAPTURED] Loan ${loanAccount.loanAccountNo} fully paid`);
+                console.log(`[PAYMENT_CAPTURED] Loan fully paid`);
 
                 await tx.loanApplication.update({
                     where: { id: loanAccount.loanApplicationId },

@@ -1,39 +1,58 @@
 // ##########----------Loan Application Model----------##########
 model LoanApplication {
-    id             String     @id @default(uuid())
-    refId          String     @unique
-    partnerId       String
-    courseId        String
-    schemeId        String
-    applicantName  String
-    applicantPhone String
-    applicantEmail String
-    applicantGender Gender
-    guardianName   String
-    guardianPhone  String
-    guardianEmail  String
-    relationship   String
-    monthlyIncome  Int        @default(0)
-    bankStatement  String?
-    admissionDoc   String?
-    fees           Float
-    loanAmount     Float?
-    interestRate   Float?
-    tenure         Int?
-    emiAmount      Float?
-    status         LoanStatus @default(PENDING)
-    createdAt      DateTime   @default(now())
-    updatedAt      DateTime   @updatedAt
+    id                        String     @id @default(uuid())
+    refId                     String     @unique
+    partnerId                 String
+    courseId                  String
+    schemeId                  String
+    applicantName             String
+    applicantPhone            String
+    alternativeApplicantPhone String?
+    applicantEmail            String
+    applicantGender           Gender
+    guardianName              String
+    guardianPhone             String
+    alternativeGuardianPhone  String?
+    guardianEmail             String
+    relationship              String
+    monthlyIncome             Int        @default(0)
+    bankStatement             String?
+    admissionDoc              String?
+    tuitionFees               Float?
+    otherCharges              Float?
+    totalFees                 Float?
+    loanAmount                Float?
+    loanAmountRequested       Float?
+    interestRate              Float?
+    tenure                    Int?
+    emiAmount                 Float?
+    status                    LoanStatus @default(PENDING)
+    createdAt                 DateTime   @default(now())
+    updatedAt                 DateTime   @updatedAt
 
-    partner            Partner             @relation(fields: [partnerId], references: [id])
-    course             Course              @relation(fields: [courseId], references: [id])
-    scheme             LoanScheme          @relation(fields: [schemeId], references: [id])
+    partner Partner    @relation(fields: [partnerId], references: [id])
+    course  Course     @relation(fields: [courseId], references: [id])
+    scheme  LoanScheme @relation(fields: [schemeId], references: [id])
 
     kyc                KYC?
     eNachMandate       ENachMandate?
     disbursement       Disbursement?
     loanAccount        LoanAccount?
     closureCertificate ClosureCertificate?
+
+    LoanSemesterFunding LoanSemesterFunding[]
+}
+
+// ##########----------Loan Semester Funding Model----------##########
+model LoanSemesterFunding {
+    id                String   @id @default(uuid())
+    loanApplicationId String
+    semester          String
+    fees              Float
+    createdAt         DateTime @default(now())
+    updatedAt         DateTime @updatedAt
+
+    loanApplication LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
 }
 
 // ##########----------KYC Model----------##########
@@ -135,7 +154,6 @@ model Disbursement {
 // ##########----------Loan Account Model----------##########
 model LoanAccount {
     id                String      @id @default(uuid())
-    loanAccountNo     String      @unique
     loanApplicationId String      @unique
     principalAmount   Float
     interestAmount    Float

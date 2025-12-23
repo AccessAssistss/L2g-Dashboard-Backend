@@ -2,6 +2,10 @@ const { PrismaClient } = require("@prisma/client");
 const { asyncHandler } = require("../../utils/asyncHandler");
 const razorpayInstance = require("../../utils/razorpay");
 const { sendENachActivationEmail } = require("../../utils/mailSender");
+const crypto = require("crypto");
+const axios = require("axios");
+const path = require("path");
+const fs = require("fs");
 
 const prisma = new PrismaClient();
 
@@ -152,7 +156,7 @@ const activateENach = asyncHandler(async (req, res) => {
 const checkENachStatus = asyncHandler(async (req, res) => {
     const userId = req.user;
     const { loanApplicationId } = req.params;
-    
+
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
     });
@@ -188,12 +192,12 @@ const checkENachStatus = asyncHandler(async (req, res) => {
         if (invoice.token_id && mandate.status !== "ACTIVE") {
             try {
                 const token = await razorpayInstance.tokens.fetch(invoice.token_id);
-                
+
                 console.log("Token status:", token.status);
 
                 if (token.status === "confirmed") {
                     const bankAccount = token.bank_account || {};
-                    
+
                     await prisma.$transaction(async (tx) => {
                         await tx.eNachMandate.update({
                             where: { id: mandate.id },
@@ -242,7 +246,7 @@ const checkENachStatus = asyncHandler(async (req, res) => {
 const resendENachLink = asyncHandler(async (req, res) => {
     const userId = req.user;
     const { loanApplicationId } = req.params;
-    
+
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
     });
@@ -284,7 +288,7 @@ const resendENachLink = asyncHandler(async (req, res) => {
 // ##########----------Get Loans For E-nach Activation----------##########
 const getLoansForENachActivation = asyncHandler(async (req, res) => {
     const userId = req.user;
-    
+
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
     });
@@ -320,7 +324,7 @@ const getLoansForENachActivation = asyncHandler(async (req, res) => {
 // ##########----------Get E-nach Pending Loans----------##########
 const getPendingENachLoans = asyncHandler(async (req, res) => {
     const userId = req.user;
-    
+
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
     });
@@ -355,14 +359,14 @@ const getPendingENachLoans = asyncHandler(async (req, res) => {
 // ##########----------Get E-nach Active Loans----------##########
 const getENachActiveLoans = asyncHandler(async (req, res) => {
     const userId = req.user;
-    
+
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
     });
     if (!user) {
         return res.respond(404, "User not found");
     }
-    
+
     const loans = await prisma.loanApplication.findMany({
         where: {
             status: "ENACH_ACTIVE"
@@ -387,11 +391,137 @@ const getENachActiveLoans = asyncHandler(async (req, res) => {
     res.respond(200, "Loans ready for disbursement (e-NACH active)", loans);
 });
 
+// ##########----------ICICI E-Nach Testing----------##########
+const testICICIENach = asyncHandler(async (req, res) => {
+    try {
+        const {
+            txnId,
+            amount = 1,
+            consumerId,
+            debitStartDate,
+            debitEndDate,
+            maxAmount,
+            amountType = "M",
+            frequency = "MNTH",
+            accountType = "Saving"
+        } = req.body;
+
+        if (
+            !txnId ||
+            !amount ||
+            !consumerId ||
+            !debitStartDate ||
+            !debitEndDate ||
+            !maxAmount ||
+            !amountType ||
+            !frequency ||
+            !accountType
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Missing mandatory fields"
+            });
+        }
+
+        const merchantId = process.env.WORLDLINE_MERCHANT_ID;
+        const salt = process.env.WORLDLINE_SALT;
+
+        const hashString = [
+            merchantId,
+            txnId,
+            amount,
+            "",
+            consumerId,
+            "",
+            "",
+            debitStartDate,
+            debitEndDate,
+            maxAmount,
+            amountType,
+            frequency,
+            "", "", "", "",
+            salt
+        ].join("|");
+
+        const token = crypto
+            .createHash("sha512")
+            .update(hashString)
+            .digest("hex");
+
+        const payload = {
+            merchantId,
+            txnId,
+            amount,
+            currency: "INR",
+            consumerId,
+            txnType: "SALE",
+            txnSubType: "DEBIT",
+            paymentMode: "netBanking",
+            deviceId: "WEBSH2",
+            token,
+            accountType,
+            debitStartDate,
+            debitEndDate,
+            maxAmount,
+            amountType,
+            frequency,
+
+            returnUrl: "https://www.l2gfincap.in/"
+        };
+
+        const pgResponse = await axios.post(
+            process.env.WORLDLINE_PG_URL,
+            payload,
+            { timeout: 20000 }
+        );
+
+        const timestamp = new Date();
+        const formattedTime = timestamp.toLocaleString("en-IN", {
+            timeZone: "Asia/Kolkata"
+        });
+
+        const fileName = `ENACH_${txnId}_${Date.now()}.txt`;
+        const logDir = "/var/www/loan2Grow/logs/enach";
+        const filePath = path.join(logDir, fileName);
+
+        const logContent = `
+========== eNACH TEST LOG ==========
+Merchant ID     : ${merchantId}
+Transaction ID  : ${txnId}
+Consumer ID     : ${consumerId}
+Timestamp       : ${formattedTime}
+
+---------- REQUEST SENT TO WORLDLINE ----------
+${JSON.stringify(payload)}
+
+---------- RESPONSE RECEIVED ----------
+        ${pgResponse.data}
+        `;
+
+        fs.writeFileSync(filePath, logContent.trim());
+
+        return res.json({
+            success: true,
+            requestSent: payload,
+            pgResponse: pgResponse.data
+        });
+
+    } catch (error) {
+        console.error("eNACH Backend Error:", error.message);
+        return res.status(500).json({
+            success: false,
+            message: "Worldline request failed",
+            error: error.message
+        });
+    }
+});
+
 module.exports = {
     activateENach,
     checkENachStatus,
     resendENachLink,
     getLoansForENachActivation,
     getPendingENachLoans,
-    getENachActiveLoans
+    getENachActiveLoans,
+    testICICIENach
 };

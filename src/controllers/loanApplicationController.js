@@ -4,6 +4,33 @@ const { calculateEMI } = require("../../helper/calculateEMI");
 
 const prisma = new PrismaClient();
 
+// ##########----------Generate Loan Ref ID----------##########
+const generateLoanRefId = async (tx) => {
+    const now = new Date();
+    const year = now.getFullYear().toString().slice(-2);
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+
+    const lastLoan = await tx.loanApplication.findFirst({
+        orderBy: { createdAt: "desc" },
+        select: { refId: true }
+    });
+
+    let nextSerial = 1;
+
+    if (lastLoan?.refId) {
+        const lastSerial = parseInt(lastLoan.refId.slice(-4));
+        if (!isNaN(lastSerial)) {
+            nextSerial = lastSerial + 1;
+        }
+    }
+
+    const serial = String(nextSerial).padStart(4, "0");
+
+    return `VSCTPL${year}${month}${serial}`;
+};
+
+module.exports = generateLoanRefId;
+
 // ##########----------Create Loan Application----------##########
 const createLoanApplication = asyncHandler(async (req, res) => {
     const userId = req.user;
@@ -14,15 +41,45 @@ const createLoanApplication = asyncHandler(async (req, res) => {
         schemeId,
         applicantName,
         applicantPhone,
+        alternativeApplicantPhone,
         applicantEmail,
         applicantGender,
         guardianName,
         guardianPhone,
+        alternativeGuardianPhone,
         guardianEmail,
         relationship,
-        fees,
-        monthlyIncome,  
+        tuitionFees,
+        otherCharges,
+        monthlyIncome,
+        selectedSemesters
     } = req.body;
+
+    try {
+        parsedSemesters =
+            typeof selectedSemesters === "string"
+                ? JSON.parse(selectedSemesters)
+                : selectedSemesters;
+    } catch (error) {
+        return res.respond(400, "Invalid selectedSemesters format");
+    }
+
+    if (!Array.isArray(parsedSemesters) || parsedSemesters.length === 0) {
+        return res.respond(400, "At least one semester must be selected for funding");
+    }
+
+    for (const sem of parsedSemesters) {
+        if (!sem.semester || !sem.fees || Number(sem.fees) <= 0) {
+            return res.respond(
+                400,
+                "Each selected semester must contain valid semester and fees"
+            );
+        }
+    }
+
+    if (!applicantGender || !["MALE", "FEMALE", "OTHER"].includes(applicantGender)) {
+        return res.respond(400, "Valid applicant gender is required (MALE, FEMALE, OTHER)");
+    }
 
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
@@ -33,10 +90,6 @@ const createLoanApplication = asyncHandler(async (req, res) => {
 
     if (!partnerId || !courseId || !schemeId) {
         return res.respond(400, "Partner, Course and Scheme are required");
-    }
-
-    if (!applicantGender || !["MALE", "FEMALE", "OTHER"].includes(applicantGender)) {
-        return res.respond(400, "Valid applicant gender is required (MALE, FEMALE, OTHER)");
     }
 
     const partner = await prisma.partner.findUnique({
@@ -68,7 +121,10 @@ const createLoanApplication = asyncHandler(async (req, res) => {
         return res.respond(400, "This scheme is only applicable for a different course");
     }
 
-    const refId = `L2G${Date.now()}${Math.floor(Math.random() * 1000)}`;
+    const loanAmountRequested = parsedSemesters.reduce(
+        (sum, sem) => sum + Number(sem.fees),
+        0
+    );
 
     const bankStatementFile = req.files?.bankStatement?.[0];
     const admissionDocFile = req.files?.admissionDoc?.[0];
@@ -76,37 +132,60 @@ const createLoanApplication = asyncHandler(async (req, res) => {
     const bankStatementUrl = bankStatementFile?.path || null;
     const admissionDocUrl = admissionDocFile?.path || null;
 
-    const loanApplication = await prisma.loanApplication.create({
-        data: {
-            refId,
-            partnerId,
-            courseId,
-            schemeId,
-            applicantName,
-            applicantPhone,
-            applicantEmail,
-            applicantGender,
-            guardianName,
-            guardianPhone,
-            guardianEmail,
-            relationship,
-            fees: fees ? parseFloat(fees) : null,
-            monthlyIncome: monthlyIncome ? parseInt(monthlyIncome) : 0,
-            bankStatement: bankStatementUrl,
-            admissionDoc: admissionDocUrl,
-        },
-        include: {
-            partner: true,
-            course: true,
-            scheme: true
-        }
+    const now = new Date();
+
+    const tuitionFeeAmount = tuitionFees ? Number(tuitionFees) : null;
+    const otherFeeAmount = otherCharges ? Number(otherCharges) : null;
+
+    const totalFees =
+        tuitionFees !== null && otherFeeAmount !== null
+            ? tuitionFeeAmount + otherFeeAmount
+            : null;
+
+    const result = await prisma.$transaction(async (tx) => {
+        const refId = await generateLoanRefId(tx);
+
+        const loanApplication = await tx.loanApplication.create({
+            data: {
+                refId,
+                partnerId,
+                courseId,
+                schemeId,
+                applicantName,
+                applicantPhone,
+                alternativeApplicantPhone,
+                applicantEmail,
+                applicantGender,
+                guardianName,
+                guardianPhone,
+                alternativeGuardianPhone,
+                guardianEmail,
+                relationship,
+                tuitionFees: tuitionFeeAmount,
+                otherCharges: otherFeeAmount,
+                totalFees,
+                monthlyIncome: monthlyIncome ? parseInt(monthlyIncome) : 0,
+                loanAmountRequested,
+                bankStatement: bankStatementUrl,
+                admissionDoc: admissionDocUrl,
+            }
+        });
+
+        await tx.loanSemesterFunding.createMany({
+            data: parsedSemesters.map((sem) => ({
+                loanApplicationId: loanApplication.id,
+                semester: sem.semester,
+                fees: Number(sem.fees)
+            }))
+        });
+
+        return loanApplication;
     });
 
-    res.respond(
-        201,
-        "Loan application created successfully",
-        loanApplication
-    );
+    res.respond(201, "Loan application created successfully", {
+        loanApplicationId: result.id,
+        loanAmountRequested
+    });
 });
 
 // ##########----------Submit KYC----------##########
@@ -450,7 +529,8 @@ const getPendingLoanDetails = asyncHandler(async (req, res) => {
             kyc: true,
             partner: true,
             course: true,
-            scheme: true
+            scheme: true,
+            LoanSemesterFunding: true
         },
     });
 
@@ -566,7 +646,8 @@ const getApprovedLoanDetails = asyncHandler(async (req, res) => {
             kyc: true,
             partner: true,
             course: true,
-            scheme: true
+            scheme: true,
+            LoanSemesterFunding: true
         },
     });
 
