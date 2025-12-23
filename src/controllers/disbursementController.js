@@ -45,6 +45,7 @@ const disburseLoan = asyncHandler(async (req, res) => {
     const interestRate = loanApplication.interestRate;
     const tenure = loanApplication.tenure;
     const scheme = loanApplication.scheme;
+    const mandate = loanApplication.eNachMandate;
 
     const result = await prisma.$transaction(async (tx) => {
         const disbursement = await tx.disbursement.create({
@@ -55,6 +56,7 @@ const disburseLoan = asyncHandler(async (req, res) => {
                 tenure,
                 advanceEMIPaid,
                 advanceEMIAmount: advanceEMIPaid ? advanceEMIAmount : 0,
+                interestPaidBy: scheme.interestPaidBy
             },
         });
 
@@ -64,11 +66,9 @@ const disburseLoan = asyncHandler(async (req, res) => {
         let remainingInterest = 0;
 
         if (scheme.interestPaidBy === "PARTNER") {
-            // Partner pays interest, student only pays principal
             totalInterest = 0;
             totalOutstanding = loanAmount;
         } else if (scheme.interestType === "FLAT") {
-            // Flat interest
             totalInterest = (loanAmount * interestRate * tenure) / (12 * 100);
             totalOutstanding = loanAmount + totalInterest;
         } else {
@@ -77,7 +77,7 @@ const disburseLoan = asyncHandler(async (req, res) => {
         }
 
         const advanceAmount = advanceEMIPaid ? (advanceEMIAmount || 0) : 0;
-        
+
         if (advanceAmount > 0) {
             if (scheme.interestPaidBy === "PARTNER") {
                 remainingPrincipal = loanAmount - advanceAmount;
@@ -113,36 +113,54 @@ const disburseLoan = asyncHandler(async (req, res) => {
             data: { status: "DISBURSED" },
         });
 
-        const mandate = loanApplication.eNachMandate;
-        const emiAmount = loanApplication.emiAmount;
-        const numberOfEMIs = Math.ceil(totalOutstanding / emiAmount);
+        let emiScheduleCount = 0;
 
-        const schedules = [];
-        let currentDate = new Date(mandate.startDate);
+        if (mandate && mandate.status === "ACTIVE") {
+            const emiAmount = loanApplication.emiAmount;
+            const numberOfEMIs = Math.ceil(totalOutstanding / emiAmount);
 
-        for (let i = 1; i <= numberOfEMIs; i++) {
-            const isLastEMI = i === numberOfEMIs;
-            const amount = isLastEMI ?
-                totalOutstanding - (emiAmount * (numberOfEMIs - 1)) :
-                emiAmount;
+            const schedules = [];
+            let currentDate = new Date(mandate.startDate);
 
-            schedules.push({
-                mandateId: mandate.id,
-                emiNumber: i,
-                emiAmount: amount,
-                scheduledDate: new Date(currentDate),
-                status: "PENDING"
-            });
+            for (let i = 1; i <= numberOfEMIs; i++) {
+                const isLastEMI = i === numberOfEMIs;
+                const amount = isLastEMI ?
+                    totalOutstanding - (emiAmount * (numberOfEMIs - 1)) :
+                    emiAmount;
 
-            currentDate.setMonth(currentDate.getMonth() + 1);
+                schedules.push({
+                    mandateId: mandate.id,
+                    emiNumber: i,
+                    emiAmount: amount,
+                    scheduledDate: new Date(currentDate),
+                    status: "PENDING"
+                });
+
+                currentDate.setMonth(currentDate.getMonth() + 1);
+            }
+
+            await tx.eMISchedule.createMany({ data: schedules });
+
+            await tx.eMISchedule.createMany({ data: schedules });
+            emiScheduleCount = schedules.length;
         }
 
-        await tx.eMISchedule.createMany({ data: schedules });
-
-        return { disbursement, loanAccount, emiScheduleCount: schedules.length };
+        return {
+            disbursement,
+            loanAccount,
+            emiScheduleCount,
+            hasENach: mandate?.status === "ACTIVE" || false
+        };
     });
 
-    res.respond(200, "Loan disbursed successfully. EMI schedule created.", result);
+    if (result.hasENach) {
+        res.respond(200, "Loan disbursed successfully. EMI schedule created for automatic deductions.", result);
+    } else {
+        res.respond(200, "Loan disbursed successfully. Manual repayment mode - no e-NACH active.", {
+            ...result,
+            note: "EMI schedule not created. Repayments must be processed manually."
+        });
+    }
 });
 
 // ##########----------Get Disbursed Loans----------##########
@@ -161,15 +179,15 @@ const getDisbursedLoans = asyncHandler(async (req, res) => {
 
     const searchFilter = search
         ? {
-              OR: [
-                  { applicantName: { contains: search, mode: "insensitive" } },
-                  { applicantPhone: { contains: search } },
-                  { applicantEmail: { contains: search, mode: "insensitive" } },
-                  { guardianName: { contains: search, mode: "insensitive" } },
-                  { guardianPhone: { contains: search } },
-                  { refId: { contains: search, mode: "insensitive" } },
-              ],
-          }
+            OR: [
+                { applicantName: { contains: search, mode: "insensitive" } },
+                { applicantPhone: { contains: search } },
+                { applicantEmail: { contains: search, mode: "insensitive" } },
+                { guardianName: { contains: search, mode: "insensitive" } },
+                { guardianPhone: { contains: search } },
+                { refId: { contains: search, mode: "insensitive" } },
+            ],
+        }
         : {};
 
     const total = await prisma.loanApplication.count({
