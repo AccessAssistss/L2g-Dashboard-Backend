@@ -15,8 +15,8 @@ const createLoanScheme = asyncHandler(async (req, res) => {
         return res.respond(403, "Only admins can create loan schemes");
     }
 
-    if (!partnerId || !courseId || !schemeName || !interestType || !interestPaidBy || !academicYearStartDate || !academicYearEndDate) {
-        return res.respond(400, "All fields are required: partnerId, courseId, schemeName, interestType, interestPaidBy");
+    if (!partnerId || !schemeName || !interestType || !interestPaidBy || !academicYearStartDate || !academicYearEndDate) {
+        return res.respond(400, "All fields are required: partnerId, schemeName, interestType, interestPaidBy");
     }
 
     if (!["FLAT", "REDUCING"].includes(interestType)) {
@@ -34,6 +34,8 @@ const createLoanScheme = asyncHandler(async (req, res) => {
     if (!partner) {
         return res.respond(404, "Partner not found");
     }
+
+    const schemeType = courseId ? "COURSE_SPECIFIC" : "PARTNER_LEVEL";
 
     if (courseId) {
         const course = await prisma.course.findUnique({
@@ -68,21 +70,21 @@ const createLoanScheme = asyncHandler(async (req, res) => {
         return res.respond(400, "Academic year end date must be after start date");
     }
 
-    const schemeType = courseId ? "COURSE_SPECIFIC" : "PARTNER_LEVEL";
-
     const scheme = await prisma.loanScheme.create({
         data: {
-            partnerId,
-            courseId: courseId || null,
+            partner: {
+                connect: { id: partnerId }
+            },
+            ...(courseId && {
+                course: {
+                    connect: { id: courseId }
+                }
+            }),
             schemeName,
             interestType,
             interestPaidBy,
             academicYearStartDate: startDate,
             academicYearEndDate: endDate
-        },
-        include: {
-            partner: true,
-            course: true
         }
     });
 

@@ -290,6 +290,7 @@ model AutoPayment {
 model Disbursement {
     id                String          @id @default(uuid())
     loanApplicationId String          @unique
+    utr               String  @default("")
     disbursedAmount   Float
     interestRate      Float
     tenure            Int
@@ -368,7 +369,7 @@ model ClosureCertificate {
 model LoanScheme {
     id                    String         @id @default(uuid())
     partnerId             String
-    courseId              String
+    courseId              String?
     schemeName            String         @unique
     interestType          InterestType
     interestPaidBy        InterestPaidBy
@@ -379,7 +380,7 @@ model LoanScheme {
     updatedAt             DateTime       @updatedAt
 
     partner      Partner           @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-    course       Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+    course       Course?            @relation(fields: [courseId], references: [id], onDelete: Cascade)
     applications LoanApplication[]
 }
 

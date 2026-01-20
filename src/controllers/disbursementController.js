@@ -12,6 +12,7 @@ const disburseLoan = asyncHandler(async (req, res) => {
         advanceEMIPaid = true,
         advanceEMIAmount = 0,
         disbursedAmount = 0,
+        utr,
     } = req.body;
 
     const user = await prisma.customUser.findUnique({
@@ -52,6 +53,7 @@ const disburseLoan = asyncHandler(async (req, res) => {
             data: {
                 loanApplicationId,
                 disbursedAmount,
+                utr,
                 interestRate,
                 tenure,
                 advanceEMIPaid,

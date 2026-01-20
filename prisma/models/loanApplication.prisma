@@ -140,6 +140,7 @@ model AutoPayment {
 model Disbursement {
     id                String          @id @default(uuid())
     loanApplicationId String          @unique
+    utr               String          @default("")
     disbursedAmount   Float
     interestRate      Float
     tenure            Int

@@ -195,6 +195,64 @@ const getRepaymentHistory = asyncHandler(async (req, res) => {
     });
 });
 
+// ##########----------Close Loan Manually----------##########
+const closeLoan = asyncHandler(async (req, res) => {
+    const userId = req.user;
+    const { loanApplicationId } = req.params;
+
+    const { remarks } = req.body;
+
+    const user = await prisma.customUser.findUnique({
+        where: { id: userId }
+    });
+    if (!user) {
+        return res.respond(404, "User not found");
+    }
+
+    const loanAccount = await prisma.loanAccount.findUnique({
+        where: { loanApplicationId },
+        include: {
+            loanApplication: true
+        }
+    });
+
+    if (!loanAccount) {
+        return res.respond(404, "Loan account not found");
+    }
+
+    if (loanAccount.loanApplication.status === "CLOSED") {
+        return res.respond(400, "Loan is already closed");
+    }
+
+    await prisma.$transaction(async (tx) => {
+
+        await tx.loanApplication.update({
+            where: { id: loanApplicationId },
+            data: {
+                status: "CLOSED"
+            }
+        });
+
+        const existingCertificate = await tx.closureCertificate.findUnique({
+            where: { loanApplicationId }
+        });
+
+        if (!existingCertificate) {
+            await tx.closureCertificate.create({
+                data: {
+                    loanApplicationId,
+                    certificateUrl: null
+                }
+            });
+        }
+    });
+
+    res.respond(200, "Loan closed successfully", {
+        loanApplicationId,
+        remarks
+    });
+});
+
 // ##########----------Get Closed Loans----------##########
 const getClosedLoans = asyncHandler(async (req, res) => {
     const userId = req.user;
@@ -473,6 +531,7 @@ const sendBulkEmiBounceMessagesFromExcel = asyncHandler(async (req, res) => {
 module.exports = {
     processRepayment,
     getRepaymentHistory,
+    closeLoan,
     getClosedLoans,
     getClosureCertificate,
     sendBulkEmiReminderMessagesFromExcel,

@@ -8,10 +8,10 @@ const prisma = new PrismaClient();
 
 // ##########----------Bulk Import Loans Controller----------##########
 const bulkImportLoans = asyncHandler(async (req, res) => {
-    const { partnerId, courseId, schemeId } = req.body;
+    const { partnerId, schemeId } = req.body;
 
-    if (!partnerId || !courseId || !schemeId) {
-        return res.respond(400, "Partner ID, Course ID, and Scheme ID are required");
+    if (!partnerId || !schemeId) {
+        return res.respond(400, "Partner ID, and Scheme ID are required");
     }
 
     const partner = await prisma.partner.findUnique({
@@ -19,13 +19,6 @@ const bulkImportLoans = asyncHandler(async (req, res) => {
     });
     if (!partner) {
         return res.respond(404, "Partner not found");
-    }
-
-    const course = await prisma.course.findUnique({
-        where: { id: courseId }
-    });
-    if (!course || course.partnerId !== partnerId) {
-        return res.respond(404, "Course not found or does not belong to selected partner");
     }
 
     const scheme = await prisma.loanScheme.findUnique({
@@ -64,11 +57,33 @@ const bulkImportLoans = asyncHandler(async (req, res) => {
         failed: []
     };
 
+    const partnerCourses = await prisma.course.findMany({
+        where: {
+            partnerId,
+            isActive: true
+        }
+    });
+
+    const courseMap = {};
+    partnerCourses.forEach(course => {
+        courseMap[course.name.toLowerCase().trim()] = course;
+    })
+
     for (let i = 0; i < data.length; i++) {
         const row = data[i];
 
         try {
             const refId = row['Loan Number'];
+
+            if (!refId) {
+                results.failed.push({
+                    row: i + 2,
+                    refId: 'N/A',
+                    applicantName: row['Applicant Name'],
+                    reason: "Loan Number is required"
+                });
+                continue;
+            }
 
             const existingLoan = await prisma.loanApplication.findFirst({
                 where: { refId }
@@ -84,6 +99,30 @@ const bulkImportLoans = asyncHandler(async (req, res) => {
                 continue;
             }
 
+            const courseName = row['Course'];
+            if (!courseName) {
+                results.failed.push({
+                    row: i + 2,
+                    refId,
+                    applicantName: row['Applicant Name'],
+                    reason: "Course name is required"
+                });
+                continue;
+            }
+
+            const matchedCourse = courseMap[courseName.toLowerCase().trim()];
+            if (!matchedCourse) {
+                results.failed.push({
+                    row: i + 2,
+                    refId,
+                    applicantName: row['Applicant Name'],
+                    reason: `Course "${courseName}" not found for this partner. Available courses: ${partnerCourses.map(c => c.name).join(', ')}`
+                });
+                continue;
+            }
+
+            const courseId = matchedCourse.id;
+
             const tuitionFees = parseFloat(row['Tuition Fees']) || 0;
             const otherCharges = parseFloat(row['Other Charges']) || 0;
             const totalFees = parseFloat(row['Total Fees']) || 0;
@@ -94,13 +133,35 @@ const bulkImportLoans = asyncHandler(async (req, res) => {
             const interestRate = parseFloat(row['Interest']) || 0;
             const tenure = parseInt(row['Tenure']) || 12;
 
+            if (!loanAmount || loanAmount <= 0) {
+                results.failed.push({
+                    row: i + 2,
+                    refId,
+                    applicantName: row['Applicant Name'],
+                    reason: "Valid Loan Amount is required"
+                });
+                continue;
+            }
+
+            if (!tenure || tenure <= 0) {
+                results.failed.push({
+                    row: i + 2,
+                    refId,
+                    applicantName: row['Applicant Name'],
+                    reason: "Valid Tenure is required"
+                });
+                continue;
+            }
+
             const genderMap = {
                 'MALE': 'MALE',
                 'FEMALE': 'FEMALE',
                 'M': 'MALE',
                 'F': 'FEMALE',
                 'Male': 'MALE',
-                'Female': 'FEMALE'
+                'Female': 'FEMALE',
+                'male': 'MALE',
+                'female': 'FEMALE'
             };
             const applicantGender = genderMap[row['Applicant Gender']] || 'OTHER';
 
@@ -110,26 +171,47 @@ const bulkImportLoans = asyncHandler(async (req, res) => {
                 try {
                     semesterFunding = JSON.parse(row['Semester Funding']);
 
-                    if (!Array.isArray(semesterFunding) || semesterFunding.length === 0) {
+                    if (!Array.isArray(semesterFunding)) {
                         throw new Error("Semester Funding must be a non-empty array");
                     }
 
-                    semesterFunding.forEach(sem => {
-                        if (!sem.semester || !sem.fees || Number(sem.fees) <= 0) {
-                            throw new Error("Invalid semester funding structure");
+                    if (semesterFunding.length === 0) {
+                        throw new Error("Semester Funding array cannot be empty");
+                    }
+
+                    let semesterTotal = 0;
+
+                    semesterFunding.forEach((sem, idx) => {
+                        if (!sem.semester || typeof sem.semester !== 'string') {
+                            throw new Error(`Semester ${idx + 1}: semester name is required`);
                         }
+                        if (!sem.fees || isNaN(parseFloat(sem.fees)) || parseFloat(sem.fees) <= 0) {
+                            throw new Error(`Semester ${idx + 1}: valid fees amount is required`);
+                        }
+                        semesterTotal += parseFloat(sem.fees);
                     });
 
+                    const tolerance = 1;
+                    if (Math.abs(semesterTotal - loanAmountRequested) > tolerance) {
+                        console.warn(`Warning: Semester total (${semesterTotal}) doesn't match loan amount requested (${loanAmountRequested}) for loan ${refId}`);
+                    }
+
                 } catch (err) {
-                    console.log(err)
+                    console.error(`Semester Funding Parse Error for ${refId}:`, err.message);
                     results.failed.push({
                         row: i + 2,
                         refId,
                         applicantName: row['Applicant Name'],
-                        reason: "Invalid Semester Funding JSON"
+                        reason: `Invalid Semester Funding: ${err.message}. Expected format: [{"semester":"Semester 1","fees":50000}]`
                     });
                     continue;
-                }
+                } 
+            } else {
+                console.warn(`No semester funding for ${refId}, creating default entry`);
+                semesterFunding = [{
+                    semester: "Full Course",
+                    fees: loanAmountRequested || loanAmount
+                }];
             }
 
             const result = await prisma.$transaction(async (tx) => {
@@ -166,7 +248,7 @@ const bulkImportLoans = asyncHandler(async (req, res) => {
                         data: semesterFunding.map(sem => ({
                             loanApplicationId: loanApplication.id,
                             semester: sem.semester,
-                            fees: Number(sem.fees)
+                            fees: parseFloat(sem.fees)
                         }))
                     });
                 }
@@ -202,9 +284,6 @@ const bulkImportLoans = asyncHandler(async (req, res) => {
                     }
                 });
 
-                const advanceEMIPaid = false;
-                const advanceEMIAmount = 0;
-
                 let totalInterest = 0;
                 let totalOutstanding = 0;
                 let remainingPrincipal = loanAmount;
@@ -225,10 +304,10 @@ const bulkImportLoans = asyncHandler(async (req, res) => {
                 await tx.disbursement.create({
                     data: {
                         loanApplicationId: loanApplication.id,
-                        disbursedAmount,
+                        disbursedAmount: disbursedAmount || loanAmount,
                         interestRate,
                         tenure,
-                        advanceEMIPaid,
+                        advanceEMIPaid: false,
                         advanceEMIAmount: 0,
                         interestPaidBy: scheme.interestPaidBy
                     }
@@ -248,20 +327,26 @@ const bulkImportLoans = asyncHandler(async (req, res) => {
                     where: { id: loanApplication.id },
                     data: { status: "DISBURSED" }
                 });
-                return loanApplication;
+                return {
+                    loanApplication,
+                    semesterCount: semesterFunding.length,
+                    courseName: matchedCourse.name
+                };
             });
 
             results.successful.push({
                 row: i + 2,
                 refId,
-                loanApplicationId: result.id,
-                applicantName: result.applicantName,
+                loanApplicationId: result.loanApplication.id,
+                applicantName: result.loanApplication.applicantName,
+                courseName: result.courseName,
                 loanAmount,
-                tenure
+                tenure,
+                semestersCreated: result.semesterCount
             });
 
         } catch (error) {
-            console.log(error)
+            console.error(`Error processing row ${i + 2}:`, error);
             results.failed.push({
                 row: i + 2,
                 refId: row['Loan Number'],
