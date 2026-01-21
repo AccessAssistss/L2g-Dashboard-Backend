@@ -62,7 +62,7 @@ const processRepayment = asyncHandler(async (req, res) => {
     }
 
     const paymentRecieptFile = req.files?.paymentReciept?.[0];
-    const paymentReceiptUrl = paymentReceiptFile?.path || null;
+    const paymentReceiptUrl = paymentRecieptFile?.path || null;
 
     const scheme = loanAccount.loanApplication.scheme;
     const loanApp = loanAccount.loanApplication;
@@ -114,7 +114,7 @@ const processRepayment = asyncHandler(async (req, res) => {
                 paymentDate: parsedPaymentDate,
                 paymentMode,
                 utrId,
-                screenshot: paymentRecieptUrl,
+                screenshot: paymentReceiptUrl,
                 principalAmount: principalPortion,
                 interestAmount: interestPortion,
                 totalOutstanding: newTotalOutstanding,
