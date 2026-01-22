@@ -1,8 +1,133 @@
 const cron = require("node-cron");
 const { PrismaClient } = require("@prisma/client");
 const razorpayInstance = require("../utils/razorpay");
+const { sendEmiReminderMessage, sendEmiBounceMessage } = require("../utils/messageSender");
+const { sendTestCopies, sendToUniqueNumbers } = require("../helper/smsHelper");
 
 const prisma = new PrismaClient();
+
+const startOfDay = (date) => {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    return d;
+};
+
+const startEmiReminderCron = () => {
+    cron.schedule("0 11 * * *", async () => {
+        try {
+            const targetDate = startOfDay(new Date());
+            targetDate.setDate(targetDate.getDate() + 4);
+
+            const emis = await prisma.eMISchedule.findMany({
+                where: {
+                    status: "PENDING",
+                    scheduledDate: {
+                        gte: targetDate,
+                        lt: new Date(targetDate.getTime() + 86400000)
+                    },
+                    loanApplication: {
+                        status: { not: "CLOSED" }
+                    }
+                },
+                include: {
+                    loanApplication: true
+                }
+            });
+
+            for (const emi of emis) {
+                const loan = emi.loanApplication;
+
+                await sendToUniqueNumbers(
+                    [loan.applicantPhone, loan.guardianPhone],
+                    async (phone) => {
+                        await sendEmiReminderMessage(
+                            phone,
+                            loan.applicantName,
+                            emi.emiAmount,
+                            loan.refId,
+                            emi.scheduledDate.toISOString().split("T")[0]
+                        );
+                    }
+                );
+            }
+
+            await sendTestCopies(async (phone) => {
+                await sendEmiReminderMessage(
+                    phone,
+                    "TEST CUSTOMER",
+                    9999,
+                    "TEST-LOAN-123",
+                    "2026-12-31"
+                );
+            });
+
+            console.log(`[EMI REMINDER] Sent ${emis.length} reminder batches`);
+        } catch (err) {
+            console.error("[EMI REMINDER ERROR]", err);
+        }
+    });
+};
+
+const startEmiBounceCron = () => {
+    cron.schedule("0 10 * * *", async () => {
+        try {
+            const today = startOfDay(new Date());
+
+            const emis = await prisma.eMISchedule.findMany({
+                where: {
+                    status: "PENDING",
+                    scheduledDate: {
+                        lt: today
+                    },
+                    loanApplication: {
+                        status: { not: "CLOSED" }
+                    }
+                },
+                include: {
+                    loanApplication: true
+                }
+            });
+
+            for (const emi of emis) {
+                const loan = emi.loanApplication;
+
+                await prisma.eMISchedule.update({
+                    where: { id: emi.id },
+                    data: {
+                        status: "FAILED",
+                        retryCount: { increment: 1 },
+                        failureReason: "EMI not paid on due date"
+                    }
+                });
+
+                await sendToUniqueNumbers(
+                    [loan.applicantPhone, loan.guardianPhone],
+                    async (phone) => {
+                        await sendEmiBounceMessage(
+                            phone,
+                            loan.applicantName,
+                            emi.emiAmount,
+                            loan.refId
+                        );
+                    }
+                );
+            }
+
+            await sendTestCopies(async (phone) => {
+                await sendEmiBounceMessage(
+                    phone,
+                    "TEST CUSTOMER",
+                    9999,
+                    "TEST-LOAN-123"
+                );
+            });
+
+            console.log(`[EMI BOUNCE] Processed ${emis.length} EMI bounces`);
+        } catch (err) {
+            console.error("[EMI BOUNCE ERROR]", err);
+        }
+    });
+};
 
 const scheduleEMIPayments = cron.schedule("0 9 * * *", async () => {
     console.log("Running EMI scheduler job...");
@@ -122,5 +247,7 @@ const stopEMIScheduler = () => {
 
 module.exports = {
     startEMIScheduler,
-    stopEMIScheduler
+    stopEMIScheduler,
+    startEmiReminderCron,
+    startEmiBounceCron
 };

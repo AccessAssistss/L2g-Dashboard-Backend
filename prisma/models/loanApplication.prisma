@@ -101,20 +101,22 @@ model ENachMandate {
 
 // ##########----------EMI Schedule Model----------##########
 model EMISchedule {
-    id            String    @id @default(uuid())
-    mandateId     String
-    emiNumber     Int
-    emiAmount     Float
-    scheduledDate DateTime
-    status        EMIStatus @default(PENDING)
-    paidDate      DateTime?
-    paymentId     String?
-    failureReason String?
-    retryCount    Int       @default(0)
-    createdAt     DateTime  @default(now())
-    updatedAt     DateTime  @updatedAt
+    id                String    @id @default(uuid())
+    loanApplicationId String
+    mandateId         String?
+    emiNumber         Int
+    emiAmount         Float
+    scheduledDate     DateTime
+    status            EMIStatus @default(PENDING)
+    paidDate          DateTime?
+    paymentId         String?
+    failureReason     String?
+    retryCount        Int       @default(0)
+    createdAt         DateTime  @default(now())
+    updatedAt         DateTime  @updatedAt
 
-    mandate ENachMandate @relation(fields: [mandateId], references: [id], onDelete: Cascade)
+    loanApplication LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+    mandate         ENachMandate?   @relation(fields: [mandateId], references: [id], onDelete: Cascade)
 }
 
 // ##########----------Auto Payment Model----------##########

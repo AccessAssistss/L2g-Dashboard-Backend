@@ -41,15 +41,18 @@ const processRepayment = asyncHandler(async (req, res) => {
         return res.respond(404, "Loan account not found");
     }
 
-    const parsedPaymentDate = parseFlexibleDate(paymentDate);
-
-    if (!parsedPaymentDate) {
-        return res.respond(400, "Invalid payment date");
+    if (loanAccount.loanApplication.status === "CLOSED") {
+        return res.respond(400, "Loan is already closed");
     }
 
     const amountPaidFloat = parseFloat(amountPaid);
     if (isNaN(amountPaidFloat) || amountPaidFloat <= 0) {
-        return res.respond(400, "Payment amount must be a valid number greater than zero");
+        return res.respond(400, "Invalid payment amount");
+    }
+
+    const parsedPaymentDate = parseFlexibleDate(paymentDate);
+    if (!parsedPaymentDate) {
+        return res.respond(400, "Invalid payment date");
     }
 
     const principalAmount = parseFloat(loanAccount.principalAmount);
@@ -107,6 +110,25 @@ const processRepayment = asyncHandler(async (req, res) => {
     }
 
     const result = await prisma.$transaction(async (tx) => {
+        const emi = await tx.eMISchedule.findFirst({
+            where: {
+                loanApplicationId,
+                status: "PENDING"
+            },
+            orderBy: { scheduledDate: "asc" }
+        });
+
+        if (!emi) {
+            return res.respond(400, "No pending EMI found for this loan");
+        }
+
+        if (Math.abs(amountPaidFloat - emi.emiAmount) > 0.01) {
+            return res.respond(
+                400,
+                `Payment must be exactly ₹${emi.emiAmount}`
+            );
+        }
+
         const repayment = await tx.repayment.create({
             data: {
                 loanAccountId: loanAccount.id,
@@ -121,6 +143,15 @@ const processRepayment = asyncHandler(async (req, res) => {
             },
         });
 
+        await tx.eMISchedule.update({
+            where: { id: emi.id },
+            data: {
+                status: "PAID",
+                paidDate: parsedPaymentDate,
+                paymentId: repayment.id
+            }
+        });
+
         const updatedAccount = await tx.loanAccount.update({
             where: { id: loanAccount.id },
             data: {
@@ -130,19 +161,6 @@ const processRepayment = asyncHandler(async (req, res) => {
                 totalPaid: totalPaid + amountPaidFloat,
             },
         });
-
-        if (newTotalOutstanding <= 0) {
-            await tx.loanApplication.update({
-                where: { id: loanAccount.loanApplicationId },
-                data: { status: "CLOSED" },
-            });
-
-            await tx.closureCertificate.create({
-                data: {
-                    loanApplicationId: loanAccount.loanApplicationId,
-                },
-            });
-        }
 
         return { repayment, updatedAccount };
     });
@@ -256,7 +274,7 @@ const closeLoan = asyncHandler(async (req, res) => {
 // ##########----------Get Closed Loans----------##########
 const getClosedLoans = asyncHandler(async (req, res) => {
     const userId = req.user;
-    const { page = 1, limit = 10, search = "" } = req.query;
+    const { page = 1, limit = 10, search = "", startDate, endDate } = req.query;
 
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
@@ -284,8 +302,19 @@ const getClosedLoans = asyncHandler(async (req, res) => {
         where: { status: "CLOSED", ...searchFilter }
     });
 
+    const dateFilter = {};
+    if (startDate) dateFilter.gte = new Date(startDate);
+    if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        dateFilter.lte = end;
+    }
+
+    const createdAtFilter =
+        Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {};
+
     const closedLoans = await prisma.loanApplication.findMany({
-        where: { status: "CLOSED", ...searchFilter },
+        where: { status: "CLOSED", ...searchFilter, ...createdAtFilter },
         skip: Number(skip),
         take: Number(limit),
         select: {

@@ -316,7 +316,15 @@ const approveLoan = asyncHandler(async (req, res) => {
         ? parseFloat(loanAmount)
         : parseFloat(loanAmount) + totalInterest;
 
-        if (emiDate !== undefined) {
+    const updateData = {
+        status: "APPROVED",
+        loanAmount: parseFloat(loanAmount),
+        interestRate: parseFloat(interestRate),
+        tenure: parseInt(tenure),
+        emiAmount: parseFloat(emiAmount.toFixed(2))
+    };
+
+    if (emiDate !== undefined) {
         if (emiDate < 1 || emiDate > 28) {
             return res.respond(400, "EMI date must be between 1 and 28");
         }
@@ -430,7 +438,7 @@ const getAllLoans = asyncHandler(async (req, res) => {
 // ##########----------Get Pending Loans----------##########
 const getPendingLoans = asyncHandler(async (req, res) => {
     const userId = req.user;
-    const { page = 1, limit = 10, search = "" } = req.query;
+    const { page = 1, limit = 10, search = "", startDate, endDate } = req.query;
 
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
@@ -461,10 +469,22 @@ const getPendingLoans = asyncHandler(async (req, res) => {
         }
     });
 
+    const dateFilter = {};
+    if (startDate) dateFilter.gte = new Date(startDate);
+    if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        dateFilter.lte = end;
+    }
+
+    const createdAtFilter =
+        Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {};
+
     const pendingLoans = await prisma.loanApplication.findMany({
         where: {
             status: "PENDING",
-            ...searchFilter
+            ...searchFilter,
+            ...createdAtFilter
         },
         skip: Number(skip),
         take: Number(limit),
@@ -552,7 +572,7 @@ const getPendingLoanDetails = asyncHandler(async (req, res) => {
 // ##########----------Get Approved Loans----------##########
 const getApprovedLoans = asyncHandler(async (req, res) => {
     const userId = req.user;
-    const { page = 1, limit = 10, search = "" } = req.query;
+    const { page = 1, limit = 10, search = "", startDate, endDate } = req.query;
 
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
@@ -585,10 +605,22 @@ const getApprovedLoans = asyncHandler(async (req, res) => {
         }
     });
 
+    const dateFilter = {};
+    if (startDate) dateFilter.gte = new Date(startDate);
+    if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        dateFilter.lte = end;
+    }
+
+    const createdAtFilter =
+        Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {};
+
     const approvedLoans = await prisma.loanApplication.findMany({
         where: {
             status: { in: statusArray },
-            ...searchFilter
+            ...searchFilter,
+            ...createdAtFilter
         },
         skip: Number(skip),
         take: Number(limit),

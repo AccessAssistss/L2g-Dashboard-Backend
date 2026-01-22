@@ -126,7 +126,10 @@ const disburseLoan = asyncHandler(async (req, res) => {
 
             let currentDate;
             if (hasActiveENach) {
-                currentDate = new Date(loanApplication.emiDate);
+                currentDate = new Date();
+                currentDate.setMonth(currentDate.getMonth() + 1);
+                currentDate.setDate(loanApplication.emiDate);
+                currentDate.setHours(0, 0, 0, 0);
             } else {
                 currentDate = new Date();
                 currentDate.setMonth(currentDate.getMonth() + 1);
@@ -176,7 +179,7 @@ const disburseLoan = asyncHandler(async (req, res) => {
 // ##########----------Get Disbursed Loans----------##########
 const getDisbursedLoans = asyncHandler(async (req, res) => {
     const userId = req.user;
-    const { page = 1, limit = 10, search = "" } = req.query;
+    const { page = 1, limit = 10, search = "", startDate, endDate } = req.query;
 
     const user = await prisma.customUser.findUnique({
         where: { id: userId }
@@ -200,12 +203,27 @@ const getDisbursedLoans = asyncHandler(async (req, res) => {
         }
         : {};
 
-    const total = await prisma.loanApplication.count({
-        where: { status: "DISBURSED", ...searchFilter }
-    });
+    const dateFilter = {};
+    if (startDate) dateFilter.gte = new Date(startDate);
+    if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        dateFilter.lte = end;
+    }
+
+    const createdAtFilter =
+        Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {};
+
+    const whereClause = {
+        status: "DISBURSED",
+        ...searchFilter,
+        ...createdAtFilter
+    };
+
+    const total = await prisma.loanApplication.count({ where: whereClause });
 
     const disbursedLoans = await prisma.loanApplication.findMany({
-        where: { status: "DISBURSED", ...searchFilter },
+        where: whereClause,
         skip: Number(skip),
         take: Number(limit),
         select: {
