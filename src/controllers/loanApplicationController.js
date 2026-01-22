@@ -52,8 +52,13 @@ const createLoanApplication = asyncHandler(async (req, res) => {
         tuitionFees,
         otherCharges,
         monthlyIncome,
-        selectedSemesters
+        selectedSemesters,
+        emiDate = 5
     } = req.body;
+
+    if (emiDate < 1 || emiDate > 28) {
+        return res.respond(400, "EMI date must be between 1 and 28");
+    }
 
     try {
         parsedSemesters =
@@ -168,6 +173,7 @@ const createLoanApplication = asyncHandler(async (req, res) => {
                 loanAmountRequested,
                 bankStatement: bankStatementUrl,
                 admissionDoc: admissionDocUrl,
+                emiDate: parseInt(emiDate)
             }
         });
 
@@ -262,7 +268,8 @@ const approveLoan = asyncHandler(async (req, res) => {
     const {
         loanAmount,
         interestRate,
-        tenure
+        tenure,
+        emiDate
     } = req.body;
 
     const user = await prisma.customUser.findUnique({
@@ -309,15 +316,16 @@ const approveLoan = asyncHandler(async (req, res) => {
         ? parseFloat(loanAmount)
         : parseFloat(loanAmount) + totalInterest;
 
+        if (emiDate !== undefined) {
+        if (emiDate < 1 || emiDate > 28) {
+            return res.respond(400, "EMI date must be between 1 and 28");
+        }
+        updateData.emiDate = parseInt(emiDate);
+    }
+
     const updatedLoan = await prisma.loanApplication.update({
         where: { id },
-        data: {
-            status: "APPROVED",
-            loanAmount: parseFloat(loanAmount),
-            interestRate: parseFloat(interestRate),
-            tenure: parseInt(tenure),
-            emiAmount: parseFloat(emiAmount.toFixed(2))
-        },
+        data: updateData,
         include: {
             scheme: true,
             partner: true,

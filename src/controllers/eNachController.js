@@ -66,7 +66,8 @@ const activateENach = asyncHandler(async (req, res) => {
         const maxAmount = loanApplication.emiAmount * 1.5;
         const startDate = new Date();
         startDate.setMonth(startDate.getMonth() + 1);
-        startDate.setDate(5);
+        startDate.setDate(loanApplication.emiDate);
+        startDate.setHours(0, 0, 0, 0);
 
         const endDate = new Date(startDate);
         endDate.setMonth(endDate.getMonth() + loanApplication.tenure + 1);

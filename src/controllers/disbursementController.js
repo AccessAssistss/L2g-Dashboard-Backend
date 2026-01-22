@@ -116,13 +116,23 @@ const disburseLoan = asyncHandler(async (req, res) => {
         });
 
         let emiScheduleCount = 0;
+        const hasActiveENach = mandate && mandate.status === "ACTIVE";
 
-        if (mandate && mandate.status === "ACTIVE") {
+        if (totalOutstanding > 0 && loanApplication.emiAmount) {
             const emiAmount = loanApplication.emiAmount;
             const numberOfEMIs = Math.ceil(totalOutstanding / emiAmount);
 
             const schedules = [];
-            let currentDate = new Date(mandate.startDate);
+
+            let currentDate;
+            if (hasActiveENach) {
+                currentDate = new Date(loanApplication.emiDate);
+            } else {
+                currentDate = new Date();
+                currentDate.setMonth(currentDate.getMonth() + 1);
+                currentDate.setDate(loanApplication.emiDate);
+                currentDate.setHours(0, 0, 0, 0);
+            }
 
             for (let i = 1; i <= numberOfEMIs; i++) {
                 const isLastEMI = i === numberOfEMIs;
@@ -131,7 +141,8 @@ const disburseLoan = asyncHandler(async (req, res) => {
                     emiAmount;
 
                 schedules.push({
-                    mandateId: mandate.id,
+                    loanApplicationId: loanApplicationId,
+                    mandateId: hasActiveENach ? mandate.id : null,
                     emiNumber: i,
                     emiAmount: amount,
                     scheduledDate: new Date(currentDate),
@@ -142,8 +153,6 @@ const disburseLoan = asyncHandler(async (req, res) => {
             }
 
             await tx.eMISchedule.createMany({ data: schedules });
-
-            await tx.eMISchedule.createMany({ data: schedules });
             emiScheduleCount = schedules.length;
         }
 
@@ -151,18 +160,17 @@ const disburseLoan = asyncHandler(async (req, res) => {
             disbursement,
             loanAccount,
             emiScheduleCount,
-            hasENach: mandate?.status === "ACTIVE" || false
+            hasENach: hasActiveENach,
+            repaymentMode: hasActiveENach ? "AUTOMATIC" : "MANUAL",
+            emiDate: loanApplication.emiDate
         };
     });
 
-    if (result.hasENach) {
-        res.respond(200, "Loan disbursed successfully. EMI schedule created for automatic deductions.", result);
-    } else {
-        res.respond(200, "Loan disbursed successfully. Manual repayment mode - no e-NACH active.", {
-            ...result,
-            note: "EMI schedule not created. Repayments must be processed manually."
-        });
-    }
+    const message = result.hasENach
+        ? `Loan disbursed successfully. EMIs will be auto-deducted on ${result.emiDate} of every month.`
+        : `Loan disbursed successfully. Manual repayments due on ${result.emiDate} of every month.`;
+
+    res.respond(200, message, result);
 });
 
 // ##########----------Get Disbursed Loans----------##########
