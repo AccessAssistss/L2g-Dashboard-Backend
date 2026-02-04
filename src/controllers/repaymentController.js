@@ -556,6 +556,138 @@ const sendBulkEmiBounceMessagesFromExcel = asyncHandler(async (req, res) => {
     res.respond(200, "Bulk EMI bounce messages sent.", results);
 });
 
+// ##########----------Export Loans For Excel----------##########
+const exportLoansForExcel = asyncHandler(async (req, res) => {
+    const userId = req.user;
+    let { status } = req.query;
+
+    if (!status) {
+        return res.respond(400, "Status is required");
+    }
+
+    const allowedStatus = [
+        "PENDING",
+        "APPROVED",
+        "ENACH_PENDING",
+        "ENACH_ACTIVE",
+        "DISBURSED",
+        "CLOSED"
+    ];
+
+    if (typeof status === "string") {
+        status = status.split(",").map(s => s.trim());
+    }
+
+    if (!Array.isArray(status) || status.length === 0) {
+        return res.respond(400, "Invalid status format");
+    }
+
+    const invalidStatus = status.find(s => !allowedStatus.includes(s));
+    if (invalidStatus) {
+        return res.respond(400, `Invalid loan status: ${invalidStatus}`);
+    }
+
+    const loans = await prisma.loanApplication.findMany({
+        where: {
+            status: { in: status }
+        },
+        select: {
+            refId: true,
+            applicantName: true,
+            applicantPhone: true,
+            applicantEmail: true,
+            applicantGender: true,
+            guardianName: true,
+            guardianPhone: true,
+            loanAmount: true,
+            tuitionFees: true,
+            otherCharges: true,
+            totalFees: true,
+            emiAmount: true,
+            emiDate: true,
+            tenure: true,
+            status: true,
+
+            partner: {
+                select: { name: true }
+            },
+            course: {
+                select: { name: true }
+            },
+            scheme: {
+                select: { schemeName: true }
+            },
+            loanAccount: {
+                select: {
+                    totalOutstanding: true
+                }
+            },
+            disbursement: {
+                select: {
+                    disbursedAmount: true,
+                    interestRate: true,
+                    tenure: true,
+                }
+            },
+            eNachMandate: {
+                select: {
+                    emiSchedules: {
+                        where: { status: "PENDING" },
+                        orderBy: { scheduledDate: "asc" },
+                        take: 1,
+                        select: { scheduledDate: true }
+                    }
+                }
+            }
+        },
+        orderBy: { createdAt: "desc" }
+    });
+
+    const excelData = loans.map((loan) => {
+        const emiSchedules = loan.eNachMandate?.emiSchedules || [];
+
+        const pendingEmis = emiSchedules.filter(
+            emi => emi.status === "PENDING"
+        );
+
+        const pendingEmiCount = pendingEmis.length;
+
+        const lastEmiDate = emiSchedules.length > 0
+            ? emiSchedules[emiSchedules.length - 1].scheduledDate
+            : "";
+
+        return {
+            "Loan Number": loan.refId || "",
+            "Applicant Name": loan.applicantName || "",
+            "Applicant Mobile": loan.applicantPhone || "",
+            "Applicant Email": loan.applicantEmail || "",
+            "Applicant Gender": loan.applicantGender || "",
+            "Guardian Name": loan.guardianName || "",
+            "Guardian Mobile": loan.guardianPhone || "",
+            "Partner Name": loan.partner?.name || "",
+            "Course Name": loan.course?.name || "",
+            "Scheme Name": loan.scheme?.schemeName || "",
+            "Tuition Fees": loan.tuitionFees || null,
+            "Other Charges": loan.otherCharges || null,
+            "Total Fees": loan.totalFees || null,
+            "Loan Amount": loan.loanAmount ?? null,
+            "Disbursed Amount": loan.disbursement.disbursedAmount ?? null,
+            "Interest Rate": loan.disbursement.interestRate ?? null,
+            "Tenure": loan.disbursement.tenure ?? "",
+            "EMI Amount": loan.emiAmount ?? null,
+            "EMI Date": loan.emiDate ?? "",
+            "Outstanding Amount": loan.loanAccount?.totalOutstanding ?? null,
+            "Due Date":
+                loan.eNachMandate?.emiSchedules?.[0]?.scheduledDate
+                    ? loan.eNachMandate.emiSchedules[0].scheduledDate
+                    : "",
+            "Pending EMI Count": pendingEmiCount,
+            "Last EMI Date": lastEmiDate,
+        }
+    });
+
+    res.respond(200, "Excel export data fetched successfully", excelData);
+});
 
 module.exports = {
     processRepayment,
@@ -564,5 +696,6 @@ module.exports = {
     getClosedLoans,
     getClosureCertificate,
     sendBulkEmiReminderMessagesFromExcel,
-    sendBulkEmiBounceMessagesFromExcel
+    sendBulkEmiBounceMessagesFromExcel,
+    exportLoansForExcel
 };

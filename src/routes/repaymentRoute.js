@@ -1,5 +1,5 @@
 const express = require("express");
-const { processRepayment, getRepaymentHistory, getClosedLoans, getClosureCertificate, sendBulkEmiReminderMessagesFromExcel, sendBulkEmiBounceMessagesFromExcel, closeLoan } = require("../controllers/repaymentController");
+const { processRepayment, getRepaymentHistory, getClosedLoans, getClosureCertificate, sendBulkEmiReminderMessagesFromExcel, sendBulkEmiBounceMessagesFromExcel, closeLoan, exportLoansForExcel } = require("../controllers/repaymentController");
 const multerErrorHandler = require("../../middleware/multerErrorHandler");
 const createUploadMiddleware = require("../../middleware/upload");
 const { PAYMENT_RECIEPT } = require("../../utils/fileFieldMapper")
@@ -18,5 +18,6 @@ router.get("/getClosedLoans", validateToken, getClosedLoans);
 router.get("/getClosureCertificate/:loanApplicationId", validateToken, getClosureCertificate);
 router.post("/sendBulkEmiReminderMessagesFromExcel", upload.single("file"), sendBulkEmiReminderMessagesFromExcel);
 router.post("/sendBulkEmiBounceMessagesFromExcel", upload.single("file"), sendBulkEmiBounceMessagesFromExcel);
+router.get("/exportLoansForExcel", validateToken, exportLoansForExcel);
 
 module.exports = router;
