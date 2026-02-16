@@ -254,8 +254,8 @@ const getSchemesByPartnerAndCourse = asyncHandler(async (req, res) => {
     const schemes = await prisma.loanScheme.findMany({
         where: {
             partnerId,
-            courseId,
-            isActive: true
+            isActive: true,
+            // courseId: courseId ? courseId : null
         },
         select: {
             id: true,

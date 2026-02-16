@@ -13,7 +13,7 @@ const uploadEmployerFiles = createUploadMiddleware("loan", PAYMENT_RECIEPT);
 
 router.post("/processRepayment/:loanApplicationId", validateToken, uploadEmployerFiles, multerErrorHandler, processRepayment);
 router.get("/getRepaymentHistory/:loanApplicationId", validateToken, getRepaymentHistory);
-router.post("/closeLoan", validateToken, closeLoan);
+router.post("/closeLoan/:loanApplicationId", validateToken, closeLoan);
 router.get("/getClosedLoans", validateToken, getClosedLoans);
 router.get("/getClosureCertificate/:loanApplicationId", validateToken, getClosureCertificate);
 router.post("/sendBulkEmiReminderMessagesFromExcel", upload.single("file"), sendBulkEmiReminderMessagesFromExcel);
