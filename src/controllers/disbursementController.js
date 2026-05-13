@@ -12,6 +12,7 @@ const disburseLoan = asyncHandler(async (req, res) => {
         advanceEMIPaid = true,
         advanceEMIAmount = 0,
         disbursedAmount = 0,
+        disbursedAt,
         utr,
     } = req.body;
 
@@ -58,7 +59,8 @@ const disburseLoan = asyncHandler(async (req, res) => {
                 tenure,
                 advanceEMIPaid,
                 advanceEMIAmount: advanceEMIPaid ? advanceEMIAmount : 0,
-                interestPaidBy: scheme.interestPaidBy
+                interestPaidBy: scheme.interestPaidBy,
+                disbursedAt: new Date(disbursedAt)
             },
         });
 

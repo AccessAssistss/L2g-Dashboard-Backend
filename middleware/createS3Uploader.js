@@ -20,7 +20,7 @@ function createS3Uploader(entity, fieldMap) {
     contentType: multerS3.AUTO_CONTENT_TYPE,
 
     key: (req, file, cb) => {
-      const subFolder = fieldMap[file.fieldname];
+      const subFolder = fieldMap[file.fieldname]; 
 
       if (!subFolder) {
         return cb(new Error(`Invalid field name: ${file.fieldname}`), null);

@@ -114,6 +114,7 @@ enum PaymentMode {
   CHEQUE
   BANK_TRANSFER
   UPI
+  ENACH
 }
 
 // ##########----------Mandate Status Enums----------##########
