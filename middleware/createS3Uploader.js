@@ -31,7 +31,7 @@ function createS3Uploader(entity, fieldMap) {
       const randomString = Math.round(Math.random() * 1e9);
       const safeName = `${file.fieldname}-${timestamp}-${randomString}${ext}`;
 
-      const s3Key = `uploads/${entity}/${subFolder}/${safeName}`;
+      const s3Key = `${process.env.s3_BASEURL}/${entity}/${subFolder}/${safeName}`;
 
       cb(null, s3Key);
     },

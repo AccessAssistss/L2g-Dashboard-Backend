@@ -8,8 +8,11 @@ const multer = require('multer');
 const fs = require('fs');
 const XLSX = require('xlsx');
 const responseMiddleware = require("./utils/responseMiddleware");
-const { startEMIScheduler } = require("./jobs/emiSchedulerJob");
 const { bulkImportLoans } = require("./push-data");
+const { sendWelcomeLetterEmail } = require("./utils/mailSender");
+
+dotenv.config();
+
 
 // Create uploads directory if it doesn't exist
 const uploadDir = path.join(__dirname, 'uploads', 'bulk');
@@ -44,10 +47,9 @@ const upload = multer({
     }
 });
 
-dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 app.use(helmet());
 
@@ -67,20 +69,16 @@ app.use(responseMiddleware);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Welcome route
-app.get("/", (req, res) => {
+app.get("/", async (req, res) => {
     res.status(200).json({
         success: true,
-        message: "Welcome to the Education Loan Dashboard Backend!",
+        message: "Welcome to the Education Loan Backend Testing!",
     });
 });
 
 // API Routes
 app.use("/api/v1", require("./src/routes/routes"));
 app.use("/push-data", upload.single('excelFile'), bulkImportLoans)
-
-// Start automated EMI scheduler
-startEMIScheduler();
-console.log("e-NACH automation enabled");
 
 // Error handling
 app.use(errorHandler);

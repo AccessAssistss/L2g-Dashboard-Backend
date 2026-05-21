@@ -6,6 +6,7 @@
     "build:prisma": "node prisma/build-schema.js",
     "generate": "npm run build:prisma && prisma generate",
     "migrate": "npm run build:prisma && prisma migrate dev",
+    "deploy:db": "npm run build:prisma && prisma db push && prisma generate",
     "start": "node server.js",
     "dev": "nodemon server.js"
   },

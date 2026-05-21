@@ -154,19 +154,39 @@ enum PaymentStatus {
 model LoanApplication {
     id                        String     @id @default(uuid())
     refId                     String     @unique
-    partnerId                 String
-    courseId                  String
-    schemeId                  String
-    applicantName             String
-    applicantPhone            String
+    partnerId                 String?
+    courseId                  String?
+    schemeId                  String?
+    applicantName             String?
+    guardianName              String?
+    applicantFirstName        String?
+    applicantMiddleName       String?
+    applicantLastName         String?
+    applicantDob              String?
+    applicantPhone            String?
+    applicantPan              String?
+    applicantAadhar           String?
     alternativeApplicantPhone String?
-    applicantEmail            String
-    applicantGender           Gender
-    guardianName              String
-    guardianPhone             String
+    applicantEmail            String?
+    applicantGender           Gender?
+    applicantAddress          String?
+    applicantState            String?
+    applicantCity             String?
+    applicantPincode          String?
+    guardianFirstName         String?
+    guardianMiddleName        String?
+    guardianLastName          String?
+    guardianDob               String?
+    guardianPan               String?
+    guardianAadhar            String?
+    guardianPhone             String?
     alternativeGuardianPhone  String?
-    guardianEmail             String
-    relationship              String
+    guardianEmail             String?
+    guardianAddress           String?
+    guardianState             String?
+    guardianCity              String?
+    guardianPincode           String?
+    relationship              String?
     monthlyIncome             Int        @default(0)
     bankStatement             String?
     admissionDoc              String?
@@ -178,21 +198,25 @@ model LoanApplication {
     interestRate              Float?
     tenure                    Int?
     emiAmount                 Float?
+    emiStartDate              DateTime?
+    emiEndDate                DateTime?
     emiDate                   Int        @default(5)
     status                    LoanStatus @default(PENDING)
     createdAt                 DateTime   @default(now())
     updatedAt                 DateTime   @updatedAt
 
-    partner Partner    @relation(fields: [partnerId], references: [id])
-    course  Course     @relation(fields: [courseId], references: [id])
-    scheme  LoanScheme @relation(fields: [schemeId], references: [id])
+    partner Partner?    @relation(fields: [partnerId], references: [id])
+    course  Course?     @relation(fields: [courseId], references: [id])
+    scheme  LoanScheme? @relation(fields: [schemeId], references: [id])
 
     kyc                KYC?
     eNachMandate       ENachMandate?
     disbursement       Disbursement?
     loanAccount        LoanAccount?
     closureCertificate ClosureCertificate?
+    LoanAgreement      LoanAgreement?
 
+    LoanCreditData      LoanCreditData[]
     LoanSemesterFunding LoanSemesterFunding[]
     emiSchedules        EMISchedule[]
 }
@@ -225,6 +249,19 @@ model KYC {
     approvedAt          DateTime?
 
     loanApplication LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+}
+
+// ####################--------------------Loan Credit Data Model--------------------####################
+model LoanCreditData {
+    id                 String   @id @default(uuid())
+    applicationId      String?
+    crifPdf            String?
+    crifAccountSummery Json?
+    createdAt          DateTime @default(now())
+    updatedAt          DateTime @updatedAt
+    isDeleted          Boolean  @default(false)
+
+    loanApplication LoanApplication? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 }
 
 // ##########----------E-NACH Mandate Model----------##########
@@ -320,6 +357,18 @@ model LoanAccount {
     utrDetails        UTRDetail[]
     createdAt         DateTime    @default(now())
     updatedAt         DateTime    @updatedAt
+
+    loanApplication LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
+}
+
+// ##########----------Loan Agreement Model----------##########
+model LoanAgreement {
+    id                  String   @id @default(uuid())
+    loanApplicationId   String   @unique
+    agreementFile       String?
+    isAgreementUploaded Boolean? @default(false)
+    createdAt           DateTime @default(now())
+    updatedAt           DateTime @updatedAt
 
     loanApplication LoanApplication @relation(fields: [loanApplicationId], references: [id], onDelete: Cascade)
 }
